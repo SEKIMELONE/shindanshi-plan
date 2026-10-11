@@ -541,7 +541,13 @@
   }
 
   async function gcalPost(body) {
-    const res = await fetch(S.settings.gcal.url, { method: 'POST', body: JSON.stringify({ token: S.settings.gcal.token, ...body }) });
+    let res;
+    try {
+      res = await fetch(S.settings.gcal.url, { method: 'POST', body: JSON.stringify({ token: S.settings.gcal.token, ...body }) });
+    } catch (e) {
+      // 届かない：URL違い、デプロイの「アクセスできるユーザー」が「全員」でない（大学アカウントなど）、圏外
+      throw new Error('届きませんでした。URLと、デプロイの「アクセスできるユーザー：全員」を確認してください');
+    }
     let j;
     try { j = await res.json(); } catch (e) { throw new Error('返事が読めません（URLを確認してください）'); }
     if (!j.ok) throw new Error(j.error || 'エラー');
