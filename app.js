@@ -121,7 +121,7 @@
   const pct = (a, b) => (b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0);
 
   // ---------- 画面の状態 ----------
-  const ui = { tab: 'today', dayOffset: 0, week: null, pat: null, edit: false, showAll: false };
+  const ui = { tab: 'cal', calOffset: 0, week: null, pat: null, edit: false, showAll: false };
   const $view = document.getElementById('view');
   const $title = document.getElementById('title');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -131,7 +131,8 @@
     document.querySelectorAll('.tabs button').forEach(b => {
       if (b.dataset.tab === ui.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
-    const f = { today: renderToday, week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
+    const f = { cal: renderCal, week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
+    $view.classList.toggle('wide', ui.tab === 'cal');
     $view.innerHTML = f();
     if (ui.tab === 'overview') {
       const g = $view.querySelector('.gantt-wrap');
@@ -139,82 +140,138 @@
     }
   }
 
-  // ---------- 今日 ----------
-  function renderToday() {
-    const t = today();
-    const d = addDays(t, ui.dayOffset);
-    const isToday = ui.dayOffset === 0;
-    const w = weekOf(d), raw = rawWeek(d);
-    const pi = patIdx(pattern(w));
-    const dayChar = DAYS[d.getDay()];
-    const key = ymd(d);
-    const checks = S.checks[key] || {};
-    $title.textContent = isToday ? '今日やること' : `${mdw(d)}のコマ`;
+  // ---------- カレンダー（メイン画面） ----------
+  const SHORT = { '財務・会計': '財務', '経済学': '経済', '企業経営理論': '企業', '運営管理': '運営', '経営情報システム': '情報', '経営法務': '法務', '中小企業経営・政策': '中小' };
+  const HOUR_PX = 52;
+  const TIMED = SLOTS.filter(s => s.a != null);
+  const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
+  const MAX_H = Math.ceil(Math.max(...TIMED.map(s => s.b)) / 60);
+
+  // ある日の1コマを表示用にまとめる
+  function slotInfo(s, date) {
+    const w = weekOf(date);
+    const text = ttCell(s.i, patIdx(pattern(w)));
+    if (!text) return null;
+    const p = parseTask(text);
+    const idxs = p.type === 'study' ? subjectsFor(p.subj, w) : [];
+    const subjName = isMeta(p.subj) && idxs.length ? idxs.map(i => SUBJ[i]).join('・') : p.subj;
+    const short = p.type === 'lecture' ? p.task : idxs.length ? idxs.map(i => SHORT[SUBJ[i]]).join('・') : (p.subj || p.task);
+    const task = p.type === 'study' && !p.task.startsWith(subjName) ? p.task : '';
+    const c = p.type === 'study' ? (idxs.length ? color(SUBJ[idxs[0]]) : color(OTHER)) : '';
+    const key = ymd(date);
+    return { s, w, date, key, text, p, idxs, subjName, short, task, c, done: !!(S.checks[key] || {})[s.i] };
+  }
+
+  function evHtml(x, style, isNow, compact) {
+    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : ''].join(' ');
+    const label = `${mdw(x.date)} ${x.s.day === '毎日' ? '' : x.s.period} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}`;
+    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-i="${x.s.i}" data-d="${x.key}" aria-label="${esc(label)}">
+      <b>${esc(x.short)}</b>${x.task && !compact ? `<span>${esc(x.task)}</span>` : ''}</button>`;
+  }
+
+  function renderCal() {
+    const t = today(), cur = weekOf(t);
+    const w = Math.max(1, Math.min(N, cur + ui.calOffset));
+    const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
+    const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+    $title.textContent = 'カレンダー';
 
     const left = diff(t, examD());
     const examTxt = left > 0 ? `<span class="num">${left}</span><small>日</small>` : left === 0 ? '今日' : '終了';
     const examSub = left > 0 ? `あと約${Math.round(left / 7)}週` : `${md(examD())}・${md(addDays(examD(), 1))}`;
     const tgt = target(w), act = actual(w);
-    const cw = weekOf(t);
-    const cumA = sumTo(actual, cw), cumT = sumTo(target, cw);
+    const cumA = sumTo(actual, cur), cumT = sumTo(target, cur);
 
     let banners = '';
-    if (raw < 1) banners += `<div class="banner">学習開始は <b>${mdw(startD())}</b>。第1週の内容を表示しています。</div>`;
-    if (raw > N) banners += `<div class="banner">計画の${N}週は終わっています。最後の週の内容を表示しています。</div>`;
-    if (diff(d, examD()) === 0 || diff(d, examD()) === -1) {
-      banners += `<div class="banner exam"><b>1次試験 ${diff(d, examD()) === 0 ? '1日目' : '2日目'}</b></div>`;
-    } else if (examWeek() === raw) {
-      banners += `<div class="banner exam"><b>今週は1次試験</b>　${mdw(examD())}・${mdw(addDays(examD(), 1))}</div>`;
-    }
+    if (examWeek() === w) banners += `<div class="banner exam"><b>今週は1次試験</b>　${mdw(examD())}・${mdw(addDays(examD(), 1))}</div>`;
     const note = range(w, 7);
     if (note) banners += `<div class="banner"><span><b>今週のメモ</b>　${esc(note)}</span></div>`;
 
-    const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
-    const rows = SLOTS.filter(s => s.day === '毎日' || s.day === dayChar)
-      .map(s => ({ s, text: ttCell(s.i, pi) }))
-      .filter(r => r.text);
-    const nextIdx = isToday ? rows.findIndex(r => r.s.a != null && r.s.a > nowMin) : -1;
-
-    const items = rows.map((r, idx) => {
-      const p = parseTask(r.text);
-      const idxs = subjectsFor(p.subj, w);
-      const c = p.type === 'study' ? (idxs.length ? color(SUBJ[idxs[0]]) : color(OTHER)) : 'transparent';
-      const subjLabel = isMeta(p.subj) && idxs.length ? idxs.map(i => SUBJ[i]).join('・') : p.subj;
-      const isNow = isToday && r.s.a != null && nowMin >= r.s.a && nowMin < r.s.b;
-      const done = !!checks[r.s.i];
-      const when = `${r.s.day === '毎日' ? '毎日' : `${esc(r.s.period)}`} · ${esc(r.s.time)}`;
-      const pills = (isNow ? '<span class="pill now">▶ 今</span>' : '') + (idx === nextIdx ? '<span class="pill accent">次</span>' : '');
-      const rng = idxs.map(i => [i, range(w, i)]).filter(([, x]) => x);
-      const rangeHtml = p.type === 'study' && rng.length
-        ? `<div class="range"><b>今週の範囲</b>　${rng.map(([i, x]) => (rng.length > 1 ? `${esc(SUBJ[i])}：` : '') + esc(x)).join('<br>')}</div>` : '';
-      const btn = p.type === 'study'
-        ? `<button class="check" data-action="check" data-i="${r.s.i}" aria-pressed="${done}" aria-label="${esc(r.s.period || r.s.day)}を${done ? '未完了に戻す' : '完了にする'}"><i></i></button>`
-        : '<span></span>';
-      return `<li class="slot ${p.type}${done ? ' done' : ''}${isNow ? ' is-now' : ''}" style="--c:${c}">
-        <span class="stripe"></span>
-        <div><div class="when">${when}${pills}</div>
-          <div class="what">${subjLabel && !p.task.startsWith(subjLabel) ? `<span class="subj">${esc(subjLabel)}</span>` : ''}${esc(p.task)}</div>${rangeHtml}</div>${btn}</li>`;
+    const head = days.map(d => {
+      const isT = diff(t, d) === 0, h = dayHours(ymd(d));
+      return `<div class="dh${isT ? ' today' : ''}"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${h > 0 ? `${fmtH(h)}h` : ''}</span></div>`;
     }).join('');
 
+    const allday = days.map(d => {
+      const chips = SLOTS.filter(s => s.a == null && (s.day === '毎日' || s.day === DAYS[d.getDay()]))
+        .map(s => slotInfo(s, d)).filter(Boolean).map(x => evHtml(x, '', false, true)).join('');
+      return `<div class="ad">${chips}</div>`;
+    }).join('');
+
+    const hours = [];
+    for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
+    const cols = days.map(d => {
+      const isT = diff(t, d) === 0;
+      const evs = TIMED.filter(s => s.day === DAYS[d.getDay()]).map(s => slotInfo(s, d)).filter(Boolean).map(x => {
+        const top = (x.s.a - MIN_H * 60) / 60 * HOUR_PX, hgt = (x.s.b - x.s.a) / 60 * HOUR_PX;
+        return evHtml(x, `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px`, isT && nowMin >= x.s.a && nowMin < x.s.b);
+      }).join('');
+      const line = isT && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
+        ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px"></div>` : '';
+      return `<div class="col${isT ? ' today' : ''}">${evs}${line}</div>`;
+    }).join('');
+
+    const ranges = SUBJ.slice(0, STUDY_N).map((name, i) => [name, range(w, i)]).filter(([, r]) => r)
+      .map(([name, r]) => `<li><span class="dot" style="background:${color(name)}"></span><div><div class="nm">${esc(name)}</div><div class="tx">${esc(r)}</div></div></li>`).join('');
+
     return `
-      <div class="daynav">
-        <button class="navbtn" data-action="day" data-v="-1" aria-label="前の日">‹</button>
-        <div class="date"><b>${mdw(d)}</b><span class="sub">第${w}週 · ${esc(W(w).phase)} · ${esc(pattern(w))}</span></div>
-        <button class="navbtn" data-action="day" data-v="1" aria-label="次の日">›</button>
+      <div class="calnav">
+        <button class="navbtn" data-action="calweek" data-v="-1" ${w <= 1 ? 'disabled' : ''} aria-label="前の週">‹</button>
+        <div class="mid"><b>${md(days[0])}〜${md(days[6])}</b><span class="sub">第${w}週 · ${esc(W(w).phase)} · ${esc(pattern(w))}</span></div>
+        <button class="navbtn" data-action="calweek" data-v="1" ${w >= N ? 'disabled' : ''} aria-label="次の週">›</button>
       </div>
-      ${isToday ? '' : '<button class="btn ghost small back-today" data-action="day" data-v="0">今日に戻る</button>'}
+      ${w !== cur ? '<button class="btn ghost small back-today" data-action="calweek" data-v="0">今週に戻る</button>' : ''}
       <div class="card">
         <div class="stats">
           <div class="stat"><div class="k">試験まで</div><div class="v">${examTxt}</div><div class="s">${examSub}</div></div>
-          <div class="stat"><div class="k">今週</div><div class="v">第<span class="num">${w}</span><small>週</small></div><div class="s">${md(weekStart(w))}〜${md(weekEnd(w))}</div></div>
-          <div class="stat"><div class="k">今週の勉強</div><div class="v num">${fmtH(act)}<small>/${fmtH(tgt)}h</small></div><div class="s">この日 ${fmtH(dayHours(key))}h</div></div>
+          <div class="stat"><div class="k">この週の勉強</div><div class="v num">${fmtH(act)}<small>/${fmtH(tgt)}h</small></div><div class="s">目標の ${pct(act, tgt)}%</div></div>
+          <div class="stat"><div class="k">累計</div><div class="v num">${fmtH(cumA)}<small>/${fmtH(cumT)}h</small></div><div class="s">今週まで</div></div>
         </div>
-        <div class="hours-row"><span class="lbl">今週 ${pct(act, tgt)}%</span><div class="bar${act >= tgt && tgt > 0 ? ' good' : ''}"><i style="width:${pct(act, tgt)}%"></i></div></div>
-        <div class="hours-row" style="border-top:0;padding-top:0;margin-top:8px"><span class="lbl">累計 <span class="num">${fmtH(cumA)} / ${fmtH(cumT)}</span>h</span><div class="bar"><i style="width:${pct(cumA, cumT)}%"></i></div></div>
+        <div class="hours-row"><div class="bar${act >= tgt && tgt > 0 ? ' good' : ''}"><i style="width:${pct(act, tgt)}%"></i></div></div>
       </div>
       ${banners}
-      <div class="section-h"><h2>${isToday ? '今日' : 'この日'}のコマ</h2><span class="aside">終わったらチェック → 時間が記録される</span></div>
-      <div class="card flush">${items ? `<ul class="slots">${items}</ul>` : '<div class="empty-note">この日の枠はありません。</div>'}</div>`;
+      <div class="cal" style="--hpx:${HOUR_PX}px">
+        <div class="cal-row cal-head"><div class="gutter"></div>${head}</div>
+        <div class="cal-row cal-allday"><div class="gutter">終日</div>${allday}</div>
+        <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
+      </div>
+      <p class="small faint" style="margin:6px 2px 0">コマをタップ →「終わった」で勉強時間が記録されます</p>
+      <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
+      <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
+  }
+
+  function toggleCheck(key, i) {
+    const c = S.checks[key] || (S.checks[key] = {});
+    if (c[i]) delete c[i]; else c[i] = 1;
+    const on = !!c[i];
+    if (!Object.keys(c).length) delete S.checks[key];
+    // 手入力でマイナスしていた分が、チェックを外したあとに残らないようにする
+    const w = weekOf(parse(key)), ch = checkedHours(w);
+    if ((wk(w).adj || 0) < -ch) setWk(w, { adj: -ch });
+    save();
+    if (on && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    return on;
+  }
+
+  function openSlot(i, key) {
+    const x = slotInfo(SLOTS[i], parse(key));
+    if (!x) return;
+    const s = x.s, study = x.p.type === 'study';
+    const rng = x.idxs.map(j => [j, range(x.w, j)]).filter(([, r]) => r);
+    const title = x.p.type === 'lecture' ? x.p.task : (x.subjName || x.p.task);
+    openDlg(`<h2>${esc(title)}</h2>
+      <p class="small muted">${mdw(x.date)} · ${s.day === '毎日' ? '毎日' : esc(s.period)} · ${esc(s.time)}${x.done ? ' · <span class="pill good">✓ 完了</span>' : ''}</p>
+      <p>${x.p.type === 'lecture' ? '<span class="muted">講義（参考として表示）</span>' : esc(x.text)}</p>
+      ${rng.length ? `<div class="field"><span>この週の範囲</span>${rng.map(([j, r]) => `<div class="rg"><span class="dot" style="background:${color(SUBJ[j])}"></span><span>${rng.length > 1 ? `<b>${esc(SUBJ[j])}</b>　` : ''}${esc(r)}</span></div>`).join('')}</div>` : ''}
+      <div class="dlg-actions"><span class="spacer"></span>
+        <button class="btn" data-dlg="cancel" type="button">閉じる</button>
+        ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}`}</button>` : ''}
+      </div>`, act => {
+      if (act !== 'toggle') return;
+      const on = toggleCheck(key, i);
+      render();
+      toast(on ? `記録しました${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}` : '未完了に戻しました');
+    });
   }
 
   // ---------- 週 ----------
@@ -624,21 +681,11 @@
     const a = el.dataset.action;
     const curW = () => ui.week || weekOf(today());
     switch (a) {
-      case 'day': {
-        const v = +el.dataset.v; ui.dayOffset = v === 0 ? 0 : ui.dayOffset + v; render(); break;
+      case 'calweek': {
+        const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
-      case 'check': {
-        const d = ymd(addDays(today(), ui.dayOffset)), i = el.dataset.i;
-        const c = S.checks[d] || (S.checks[d] = {});
-        if (c[i]) delete c[i]; else c[i] = 1;
-        if (!Object.keys(c).length) delete S.checks[d];
-        // 手入力でマイナスしていた分が、チェックを外したあとに残らないようにする
-        const w = weekOf(addDays(today(), ui.dayOffset)), ch = checkedHours(w);
-        if ((wk(w).adj || 0) < -ch) setWk(w, { adj: -ch });
-        save(); render();
-        if (c[i] && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-        break;
-      }
+      case 'slot': openSlot(+el.dataset.i, el.dataset.d); break;
+      case 'openweek': ui.week = +el.dataset.w || null; ui.tab = 'week'; ui.edit = false; render(); window.scrollTo(0, 0); break;
       case 'week': ui.week = Math.max(1, Math.min(N, curW() + +el.dataset.v)); render(); break;
       case 'goweek': {
         const w = +el.dataset.w; ui.week = w || null; render();
@@ -688,7 +735,7 @@
   function tick() {
     if (document.hidden || $dlg.open || document.activeElement?.matches('textarea')) return;
     const d = ymd(today());
-    if (ui.tab === 'today' || d !== lastDay) { lastDay = d; render(); }
+    if (ui.tab === 'cal' || d !== lastDay) { lastDay = d; render(); }
   }
   setInterval(tick, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
