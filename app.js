@@ -158,11 +158,15 @@
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
-  // 移動したコマ。キーは「元の日付|時間割の行」。同じ週の中でしか動かせない
+  // カレンダーの週は日曜始まりで表示する（計画の「第N週」は月〜日のまま）
+  const sunday = d => addDays(d, -d.getDay());
+  const sameCalWeek = (a, b) => diff(sunday(a), sunday(b)) === 0;
+
+  // 移動したコマ。キーは「元の日付|時間割の行」。カレンダーの同じ週（日〜土）の中でしか動かせない
   const moveKey = (key, i) => `${key}|${i}`;
   function getMove(key, i) {
     const m = S.moves[moveKey(key, i)];
-    return m && rawWeek(parse(m.d)) === rawWeek(parse(key)) ? m : null;
+    return m && sameCalWeek(parse(m.d), parse(key)) ? m : null;
   }
 
   // ある日の1コマを表示用にまとめる（date は元の日付）
@@ -239,8 +243,10 @@
 
   function renderCal() {
     const t = today(), cur = weekOf(t);
-    const w = Math.max(1, Math.min(N, cur + ui.calOffset));
-    const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
+    const days = Array.from({ length: 7 }, (_, k) => addDays(sunday(t), 7 * ui.calOffset + k));
+    const w = weekOf(days[1]);   // 表示中の週の月曜が入っている計画の週
+    const canPrev = diff(sunday(startD()), days[0]) > 0;
+    const canNext = diff(days[0], sunday(addDays(startD(), 7 * N - 1))) > 0;
     ui.calDays = days; hpx = HOUR_PX;
     const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
     const todayCol = days.findIndex(d => diff(t, d) === 0);
@@ -249,8 +255,12 @@
     const left = diff(t, examD());
     const examTxt = left > 0 ? `<span class="num">${left}</span><small>日</small>` : left === 0 ? '今日' : '終了';
     const examSub = left > 0 ? `あと約${Math.round(left / 7)}週` : `${md(examD())}・${md(addDays(examD(), 1))}`;
-    const tgt = target(w), act = actual(w);
+    // 勉強時間は「今日が入っている計画の週」（今日が表示外なら月曜の週）で出す
+    const sw = todayCol >= 0 ? cur : w;
+    const tgt = target(sw), act = actual(sw);
     const cumA = sumTo(actual, cur), cumT = sumTo(target, cur);
+    const ws = weekOf(days[0]);   // 日曜は前の計画週に入る
+    const weekLabel = ws !== w ? `第${ws}〜${w}週` : `第${w}週`;
 
     let banners = '';
     if (examWeek() === w) banners += `<div class="banner exam"><b>今週は1次試験</b>　${mdw(examD())}・${mdw(addDays(examD(), 1))}</div>`;
@@ -288,15 +298,15 @@
 
     return `
       <div class="calnav">
-        <button class="navbtn" data-action="calweek" data-v="-1" ${w <= 1 ? 'disabled' : ''} aria-label="前の週">‹</button>
-        <div class="mid"><b>${md(days[0])}〜${md(days[6])}</b><span class="sub">第${w}週 · ${esc(W(w).phase)} · ${esc(pattern(w))}</span></div>
-        <button class="navbtn" data-action="calweek" data-v="1" ${w >= N ? 'disabled' : ''} aria-label="次の週">›</button>
+        <button class="navbtn" data-action="calweek" data-v="-1" ${canPrev ? '' : 'disabled'} aria-label="前の週">‹</button>
+        <div class="mid"><b>${md(days[0])}〜${md(days[6])}</b><span class="sub">${weekLabel} · ${esc(W(w).phase)} · ${esc(pattern(w))}</span></div>
+        <button class="navbtn" data-action="calweek" data-v="1" ${canNext ? '' : 'disabled'} aria-label="次の週">›</button>
       </div>
-      ${w !== cur ? '<button class="btn ghost small back-today" data-action="calweek" data-v="0">今週に戻る</button>' : ''}
+      ${ui.calOffset !== 0 ? '<button class="btn ghost small back-today" data-action="calweek" data-v="0">今週に戻る</button>' : ''}
       <div class="card">
         <div class="stats">
           <div class="stat"><div class="k">試験まで</div><div class="v">${examTxt}</div><div class="s">${examSub}</div></div>
-          <div class="stat"><div class="k">この週の勉強</div><div class="v num">${fmtH(act)}<small>/${fmtH(tgt)}h</small></div><div class="s">目標の ${pct(act, tgt)}%</div></div>
+          <div class="stat"><div class="k">第${sw}週の勉強</div><div class="v num">${fmtH(act)}<small>/${fmtH(tgt)}h</small></div><div class="s">目標の ${pct(act, tgt)}%</div></div>
           <div class="stat"><div class="k">累計</div><div class="v num">${fmtH(cumA)}<small>/${fmtH(cumT)}h</small></div><div class="s">今週まで</div></div>
         </div>
         <div class="hours-row"><div class="bar${act >= tgt && tgt > 0 ? ' good' : ''}"><i style="width:${pct(act, tgt)}%"></i></div></div>
@@ -362,7 +372,7 @@
     return h ? `${h}:${pad(m)}:${pad(x)}` : `${m}:${pad(x)}`;
   };
   const clock = () => { const n = new Date(); return `${n.getHours()}:${pad(n.getMinutes())}`; };
-  const weekDaysOf = d => { const s0 = addDays(startD(), 7 * (rawWeek(d) - 1)); return Array.from({ length: 7 }, (_, k) => addDays(s0, k)); };
+  const weekDaysOf = d => Array.from({ length: 7 }, (_, k) => addDays(sunday(d), k));   // 日〜土
   function ring(p) {
     const r = 33, c = 2 * Math.PI * r;
     return `<svg class="ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" class="ring-bg"/>${p > 0 ? `<circle cx="40" cy="40" r="${r}" class="ring-fg" stroke-dasharray="${(c * Math.min(1, p)).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/>` : ''}</svg>`;
@@ -425,7 +435,7 @@
           <div class="k"><span><span class="live"></span>${cur.p.type === 'lecture' ? '講義中' : 'いまのコマ'}</span><span class="clock num" data-clock>${clock()}</span></div>
           <div class="nm">${esc(evName(cur))}</div><div class="tk">${esc(evTask(cur))}</div>
           <div class="big num"><small>残り</small><span data-cd="${e0}">${fmtLeft(e0 - Date.now())}</span></div>
-          <div class="bar thin"><i data-prog="${s0},${e0}" style="width:${Math.min(100, (Date.now() - s0) / (e0 - s0) * 100).toFixed(1)}%"></i></div>
+          <div class="bar thin"><i data-left="${s0},${e0}" style="width:${Math.max(0, (e0 - Date.now()) / (e0 - s0) * 100).toFixed(1)}%"></i></div>
           <div class="s num">${hm(cur.a)}〜${hm(cur.b)}</div>${rangeBox(cur)}${btn}</div>`;
       } else if (next) {
         const s0 = atMin(d, next.a);
@@ -497,9 +507,9 @@
       const left = +el.dataset.cd - now;
       if (left <= 0) expired = true; else el.textContent = fmtLeft(left);
     });
-    $view.querySelectorAll('[data-prog]').forEach(el => {
-      const [a, b] = el.dataset.prog.split(',').map(Number);
-      el.style.width = `${Math.min(100, Math.max(0, (now - a) / (b - a) * 100)).toFixed(2)}%`;
+    $view.querySelectorAll('[data-left]').forEach(el => {   // 残り時間の割合（だんだん減る）
+      const [a, b] = el.dataset.left.split(',').map(Number);
+      el.style.width = `${Math.min(100, Math.max(0, (b - now) / (b - a) * 100)).toFixed(2)}%`;
     });
     $view.querySelectorAll('[data-clock]').forEach(el => { el.textContent = clock(); });
     if (expired && !drag && !$dlg.open) render();   // コマが終わった／始まったら切り替える
@@ -508,7 +518,7 @@
   function backToWeek() {
     const d = parse(ui.day);
     ui.day = null;
-    ui.calOffset = weekOf(d) - weekOf(today());
+    ui.calOffset = Math.round(diff(sunday(today()), sunday(d)) / 7);
   }
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
