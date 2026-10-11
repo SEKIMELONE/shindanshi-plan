@@ -407,6 +407,14 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 .settings-group { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .settings-group h3 { margin: 0; font-size: 13px; color: var(--muted); }
 .settings-group .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 36px; }
+.check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+.settings-group details summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 4px 0; }
+.steps { margin: 6px 0 0; padding-left: 1.3em; line-height: 1.65; }
+.steps li + li { margin-top: 4px; }
+.steps a { color: var(--accent); }
+.warn { color: var(--now) !important; }
+.gsync { width: 100%; }
 
 #toast { position: fixed; left: 50%; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 14px); transform: translate(-50%, 10px); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 20; max-width: calc(100vw - 32px); }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }

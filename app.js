@@ -10,7 +10,8 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto' }, weeks: {}, checks: {}, moves: {},
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false } },
+      weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '' },
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
   function normalize(s) {
@@ -19,7 +20,8 @@
     const ov = s.ov || {};
     return {
       v: 1,
-      settings: { ...b.settings, ...(s.settings || {}) },
+      settings: { ...b.settings, ...(s.settings || {}), gcal: { ...b.settings.gcal, ...((s.settings || {}).gcal || {}) } },
+      gsync: { ...b.gsync, ...(s.gsync || {}) },
       weeks: s.weeks || {},
       checks: s.checks || {},
       moves: s.moves || {},
@@ -141,6 +143,7 @@
       const el = $view.querySelector('.day-main .nowline') || $view.querySelector('.day-main .col .ev');
       scrollTo(0, el ? Math.max(0, el.getBoundingClientRect().top + scrollY - innerHeight * 0.3) : 0);
     }
+    gcalSchedule();
     if (ui.tab === 'overview') {
       const g = $view.querySelector('.gantt-wrap');
       if (g) g.scrollLeft = Math.max(0, (weekOf(today()) - 4) * 18);
@@ -310,6 +313,7 @@
       <div class="cal-foot">
         <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
+        ${gcalOn() ? `<p class="small faint gsync${S.gsync.err ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
       <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
@@ -510,6 +514,82 @@
     ui.day = null;
     ui.calOffset = weekOf(d) - weekOf(today());
   }
+
+
+  // ---------- Googleカレンダー連携（Apps Script 経由。アプリ → カレンダーの一方向） ----------
+  // 今週・来週・表示中の週について、中身が前回送ったときから変わっていたら1週間分まるごと送る
+  const GCOLOR = { '財務・会計': '9', '経済学': '10', '企業経営理論': '6', '運営管理': '3', '経営情報システム': '7', '経営法務': '5', '中小企業経営・政策': '4' };
+  const gcalOn = () => !!(S.settings.gcal.url && S.settings.gcal.token);
+  const hashStr = str => { let h = 5381; for (let i = 0; i < str.length; i++) h = (h * 33 + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+
+  function gcalPayload(w) {
+    const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
+    const lect = S.settings.gcal.lectures;
+    const events = weekEvents(days)
+      .filter(x => x.a != null && (x.p.type === 'study' || (lect && x.p.type === 'lecture')))
+      .map(x => {
+        const study = x.p.type === 'study', tk = evTask(x), rng = study ? evRange(x) : '';
+        return {
+          id: `${x.key}_${x.s.i}`,
+          title: study ? `${x.done ? '✓ ' : ''}${evName(x)}${tk ? `：${tk}` : ''}` : `${evName(x)}（講義）`,
+          start: atMin(x.shown, x.a), end: atMin(x.shown, x.b),
+          desc: [rng && `今週の範囲：${rng}`, `第${w}週・${W(w).phase}`, '診断士プランから自動で作成（アプリで動かすと、ここも動きます）'].filter(Boolean).join('\n'),
+          color: !study ? '1' : x.done ? '8' : (GCOLOR[SUBJ[x.idxs[0]]] || '8'),
+        };
+      });
+    return { from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0), events };
+  }
+
+  async function gcalPost(body) {
+    const res = await fetch(S.settings.gcal.url, { method: 'POST', body: JSON.stringify({ token: S.settings.gcal.token, ...body }) });
+    let j;
+    try { j = await res.json(); } catch (e) { throw new Error('返事が読めません（URLを確認してください）'); }
+    if (!j.ok) throw new Error(j.error || 'エラー');
+    return j;
+  }
+
+  let gTimer = 0, gBusy = false, gAgain = false;
+  function gcalSchedule() {
+    if (!gcalOn()) return;
+    clearTimeout(gTimer);
+    gTimer = setTimeout(() => gcalFlush(false), 1500);
+  }
+  async function gcalFlush(force) {
+    if (!gcalOn()) return;
+    if (gBusy) { gAgain = true; return; }
+    if (!navigator.onLine) { S.gsync.err = 'オフライン（つながったら送ります）'; updateSyncNote(); return; }
+    gBusy = true;
+    const cur = weekOf(today());
+    const weeks = new Set([cur, Math.min(N, cur + 1)]);
+    if (ui.tab === 'cal' && ui.calDays) weeks.add(weekOf(ui.calDays[0]));
+    let sent = 0;
+    try {
+      for (const w of weeks) {
+        const body = gcalPayload(w), h = hashStr(JSON.stringify(body));
+        if (!force && S.gsync.hash[w] === h) continue;
+        await gcalPost(body);
+        S.gsync.hash[w] = h; sent++;
+      }
+      S.gsync.err = '';
+      if (sent || force) S.gsync.last = Date.now();
+    } catch (e) {
+      S.gsync.err = String(e.message || e);
+    }
+    gBusy = false;
+    save(); updateSyncNote();
+    if (gAgain) { gAgain = false; gcalSchedule(); }
+  }
+  function syncNoteText() {
+    const g = S.gsync;
+    if (g.err) return `Googleカレンダー：送れていません（${g.err}）`;
+    if (!g.last) return 'Googleカレンダー：まだ送っていません';
+    const t = new Date(g.last);
+    return `Googleカレンダー：${diff(parse(ymd(t)), today()) === 0 ? '' : `${md(t)} `}${hm(t.getHours() * 60 + t.getMinutes())} に反映`;
+  }
+  function updateSyncNote() {
+    document.querySelectorAll('[data-gsync]').forEach(el => { el.textContent = syncNoteText(); el.classList.toggle('warn', !!S.gsync.err); });
+  }
+  addEventListener('online', () => gcalSchedule());
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
   // マウスは押して動かすとすぐ、タッチは長押ししてから動かす（普通のスクロールと区別するため）
@@ -945,6 +1025,26 @@
         <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
         <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
       ${actions(false)}
+      <div class="settings-group"><h3>Googleカレンダー連携</h3>
+        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（今週・来週・表示中の週）。動かす・「終わった」にすると、カレンダー側も変わります。記録をつける端末1台だけで設定してください。</p>
+        <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
+        <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
+        <label class="check-row"><input name="glect" type="checkbox" ${st.gcal.lectures ? 'checked' : ''}> 講義も入れる</label>
+        <div class="btns">
+          <button class="btn small" type="button" data-dlg="gtest">接続テスト</button>
+          ${gcalOn() ? '<button class="btn small" type="button" data-dlg="gsync">今すぐ反映</button>' : ''}
+        </div>
+        <p class="small faint${S.gsync.err ? ' warn' : ''}" data-gsync>${gcalOn() ? esc(syncNoteText()) : ''}</p>
+        <details class="small muted"><summary>最初の準備（パソコンで5分くらい）</summary>
+          <ol class="steps">
+            <li>連携用スクリプトをコピーする <button class="btn small" type="button" data-dlg="gcopy">スクリプトをコピー</button></li>
+            <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> で新しいプロジェクトを作り、最初からあるコードを消して貼り付け、保存する</li>
+            <li>上の「実行する関数」で <b>setup</b> を選んで「実行」→ 権限を許可する（「確認されていません」と出たら「詳細」→「移動」）。実行ログの<b>合言葉</b>を控える。カレンダー「診断士プラン」もここで作られる</li>
+            <li>「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」、実行ユーザー「自分」、アクセス「全員」でデプロイし、<b>URL</b>を控える</li>
+            <li>このページに URL と合言葉を入れて「接続テスト」→「保存」</li>
+          </ol>
+        </details>
+      </div>
       <div class="settings-group"><h3>データ</h3>
         <p class="small muted">記録はこの端末のブラウザの中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどき書き出してください。</p>
         <div class="btns">
@@ -956,6 +1056,28 @@
         </div>
       </div>`, act => {
       if (act === 'export') { exportData(); return false; }
+      if (act === 'gcopy') {
+        fetch('gas/Code.gs', { cache: 'no-cache' }).then(r => r.text())
+          .then(t => navigator.clipboard.writeText(t)).then(() => toast('スクリプトをコピーしました'))
+          .catch(() => toast('コピーできませんでした'));
+        return false;
+      }
+      if (act === 'gtest' || act === 'gsync') {
+        const url = fval('gurl').trim(), token = fval('gtoken').trim();
+        if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url) || !token) { toast('URL（https://script.google.com/…）と合言葉を入れてください'); return false; }
+        const prev = S.settings.gcal;
+        S.settings.gcal = { url, token, lectures: !!$form.elements.glect.checked };
+        if (act === 'gtest') {
+          gcalPost({ ping: true })
+            .then(j => toast(`つながりました（カレンダー「${j.calendar}」）`))
+            .catch(e => toast(`つながりません：${e.message || e}`))
+            .finally(() => { S.settings.gcal = prev; });
+        } else {
+          save(); toast('反映しています…');
+          gcalFlush(true).then(() => toast(S.gsync.err ? `送れませんでした：${S.gsync.err}` : 'Googleカレンダーに反映しました'));
+        }
+        return false;
+      }
       if (act === 'import') { importData(); return false; }
       if (act === 'reset-ov') {
         if (!confirm('計画・時間割・ガントチャートの編集を、スプレッドシートの内容に戻します。勉強時間の記録とメモは残ります。')) return false;
@@ -971,7 +1093,9 @@
       }
       const start = fval('start'), exam = fval('exam');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(exam)) { toast('日付を入れてください'); return false; }
-      S.settings = { ...st, start, exam, theme: fval('theme') };
+      const gcal = { url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked };
+      if (JSON.stringify(gcal) !== JSON.stringify(st.gcal)) S.gsync = { hash: {}, last: 0, err: '' };   // 設定が変わったら全部送り直す
+      S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
       save(); render();
       toast(parse(start).getDay() === 1 ? '保存しました' : '保存しました（開始日が月曜ではありません）');
     });
@@ -982,7 +1106,8 @@
 
   async function exportData() {
     const name = `shindanshi-plan-${ymd(today()).replace(/-/g, '')}.json`;
-    const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
+    const out = { ...S, gsync: undefined, settings: { ...S.settings, gcal: { ...S.settings.gcal, token: '' } } };
+    const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
     try {
       const file = new File([blob], name, { type: 'application/json' });
       if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPhone|iPad|Android/.test(navigator.userAgent)) {
