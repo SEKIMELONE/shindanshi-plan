@@ -365,7 +365,7 @@
   const weekDaysOf = d => { const s0 = addDays(startD(), 7 * (rawWeek(d) - 1)); return Array.from({ length: 7 }, (_, k) => addDays(s0, k)); };
   function ring(p) {
     const r = 33, c = 2 * Math.PI * r;
-    return `<svg class="ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" class="ring-bg"/><circle cx="40" cy="40" r="${r}" class="ring-fg" stroke-dasharray="${(c * Math.min(1, p)).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/></svg>`;
+    return `<svg class="ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" class="ring-bg"/>${p > 0 ? `<circle cx="40" cy="40" r="${r}" class="ring-fg" stroke-dasharray="${(c * Math.min(1, p)).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/>` : ''}</svg>`;
   }
 
   function renderDay() {
@@ -408,6 +408,14 @@
     if (isT) {
       const cur = timed.filter(x => nowMin >= x.a && nowMin < x.b).sort((p, q) => (q.p.type === 'study') - (p.p.type === 'study'))[0];
       const next = timed.filter(x => x.a > nowMin).sort((p, q) => p.a - q.a)[0];
+      // 休憩中は、一つ前の勉強のコマをその場で「終わった」にできるようにする
+      const prev = timed.filter(x => x.p.type === 'study' && x.b <= nowMin).sort((p, q) => q.b - p.b)[0];
+      const prevBox = !prev ? '' : `<div class="prev">
+          <div class="pk">前のコマ</div>
+          <div class="pn"><span class="dot" style="background:${prev.c}"></span><span>${esc(evName(prev))}</span><span class="faint num">${hm(prev.a)}〜${hm(prev.b)}</span></div>
+          ${prev.done ? '<div class="pill good">✓ 記録済み</div>'
+            : `<button class="btn primary small" data-action="quickdone" data-i="${prev.s.i}" data-d="${prev.key}">終わった（＋${fmtH(prev.s.hours)}h）</button>`}
+        </div>`;
       if (cur) {
         const s0 = atMin(d, cur.a), e0 = atMin(d, cur.b);
         const btn = cur.p.type !== 'study' ? ''
@@ -422,14 +430,15 @@
       } else if (next) {
         const s0 = atMin(d, next.a);
         nowCard = `<div class="card side now-card idle" style="--c:${next.c || 'var(--faint)'}">
-          <div class="k"><span>次のコマ</span><span class="clock num" data-clock>${clock()}</span></div>
-          <div class="nm">${esc(evName(next))}</div><div class="tk">${esc(evTask(next))}</div>
+          <div class="k"><span>休憩中</span><span class="clock num" data-clock>${clock()}</span></div>
+          <div class="pk" style="margin-top:6px">次のコマ</div>
+          <div class="nm" style="margin-top:0">${esc(evName(next))}</div><div class="tk">${esc(evTask(next))}</div>
           <div class="big num"><small>始まるまで</small><span data-cd="${s0}">${fmtLeft(s0 - Date.now())}</span></div>
-          <div class="s num">${hm(next.a)}〜${hm(next.b)}</div>${rangeBox(next)}</div>`;
+          <div class="s num">${hm(next.a)}〜${hm(next.b)}</div>${rangeBox(next)}${prevBox}</div>`;
       } else {
         nowCard = `<div class="card side now-card idle">
           <div class="k"><span>今日のコマ</span><span class="clock num" data-clock>${clock()}</span></div>
-          <div class="nm">おしまい</div><div class="s">${study.length ? `${doneN} / ${study.length} コマ終わりました` : '今日は勉強のコマがありません'}</div></div>`;
+          <div class="nm">おしまい</div><div class="s">${study.length ? `${doneN} / ${study.length} コマ終わりました` : '今日は勉強のコマがありません'}</div>${prevBox}</div>`;
       }
     } else {
       nowCard = `<div class="card side now-card idle">
@@ -440,6 +449,11 @@
     const tgt = target(w), act = actual(w), left = diff(t, examD());
     const note = range(w, 7);
     const side = `
+      <div class="card side exam">
+        <div class="k"><span>1次試験まで</span></div>
+        <div class="mid num"><b>${left > 0 ? left : left === 0 ? '今日' : '終了'}</b>${left > 0 ? '<small> 日</small>' : ''}</div>
+        <div class="s">${mdw(examD())}${left > 0 ? ` · あと約${Math.round(left / 7)}週` : ''}</div>
+      </div>
       ${nowCard}
       <div class="card side">
         <div class="k"><span>${isT ? '今日' : 'この日'}の勉強</span></div>
@@ -451,11 +465,6 @@
         <div class="mid num"><b>${fmtH(act)}</b><small> / ${fmtH(tgt)}h</small></div>
         <div class="bar thin${act >= tgt && tgt > 0 ? ' good' : ''}"><i style="width:${pct(act, tgt)}%"></i></div>
         <div class="s">${act >= tgt ? '目標達成' : `あと ${fmtH(tgt - act)}h`}</div>
-      </div>
-      <div class="card side exam">
-        <div class="k"><span>1次試験まで</span></div>
-        <div class="mid num"><b>${left > 0 ? left : left === 0 ? '今日' : '終了'}</b>${left > 0 ? '<small> 日</small>' : ''}</div>
-        <div class="s">${mdw(examD())}${left > 0 ? ` · あと約${Math.round(left / 7)}週` : ''}</div>
       </div>
       ${note ? `<div class="card side note"><div class="k"><span>今週のメモ</span></div><div class="s">${esc(note)}</div></div>` : ''}`;
 
