@@ -122,7 +122,7 @@
   const pct = (a, b) => (b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0);
 
   // ---------- 画面の状態 ----------
-  const ui = { tab: 'cal', calOffset: 0, week: null, pat: null, edit: false, showAll: false };
+  const ui = { tab: 'cal', calOffset: 0, day: null, scrollNow: false, week: null, pat: null, edit: false, showAll: false };
   const $view = document.getElementById('view');
   const $title = document.getElementById('title');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -132,9 +132,15 @@
     document.querySelectorAll('.tabs button').forEach(b => {
       if (b.dataset.tab === ui.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
-    const f = { cal: renderCal, week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
+    const f = { cal: () => (ui.day ? renderDay() : renderCal()), week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
     $view.classList.toggle('wide', ui.tab === 'cal');
     $view.innerHTML = f();
+    if (ui.tab === 'cal' && ui.day && ui.scrollNow) {
+      // 日ページを開いたら、今の時刻（なければ最初のコマ）が見える位置まで動かす
+      ui.scrollNow = false;
+      const el = $view.querySelector('.day-main .nowline') || $view.querySelector('.day-main .col .ev');
+      scrollTo(0, el ? Math.max(0, el.getBoundingClientRect().top + scrollY - innerHeight * 0.3) : 0);
+    }
     if (ui.tab === 'overview') {
       const g = $view.querySelector('.gantt-wrap');
       if (g) g.scrollLeft = Math.max(0, (weekOf(today()) - 4) * 18);
@@ -143,7 +149,9 @@
 
   // ---------- カレンダー（メイン画面） ----------
   const SHORT = { '財務・会計': '財務', '経済学': '経済', '企業経営理論': '企業', '運営管理': '運営', '経営情報システム': '情報', '経営法務': '法務', '中小企業経営・政策': '中小' };
-  const HOUR_PX = 52;
+  const HOUR_PX = 52;                   // 週表示の1時間の高さ
+  const DAY_HPX = 60;                   // 日表示の1時間の高さ
+  let hpx = HOUR_PX;                    // いま表示中の画面の1時間の高さ（ドラッグで使う）
   const SNAP = 10;                       // 移動は10分刻み（大学の時限が10分単位なので）
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
@@ -210,21 +218,30 @@
     if (group.length) flush();
   }
 
-  function evHtml(x, style, isNow, compact) {
+  const evName = x => (x.p.type === 'lecture' ? x.p.task : (x.subjName || x.p.task));
+  const evTask = x => (x.p.type === 'lecture' ? '講義' : (x.task || (x.text !== evName(x) ? x.text : '')));
+  const evRange = x => x.idxs.map(j => range(x.w, j)).filter(Boolean).join(' / ');
+
+  // mode: 'chip'（週表示の終日）／'week'（週表示）／'day'（日表示）
+  function evHtml(x, style, isNow, mode = 'week') {
     const movable = x.p.type === 'study';
     const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : ''].join(' ');
     const when = x.a == null ? '' : ` ${hm(x.a)}〜${hm(x.b)}`;
     const label = `${mdw(x.shown)}${when} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}${x.moved ? '（移動済み）' : ''}`;
+    let inner = `<b>${esc(x.short)}</b>${x.task && mode === 'week' ? `<span>${esc(x.task)}</span>` : ''}`;
+    if (mode === 'day') {
+      const tk = evTask(x), rng = x.p.type === 'study' ? evRange(x) : '';
+      inner = `${x.a == null ? '' : `<i class="tm num">${hm(x.a)}〜${hm(x.b)}</i>`}<b>${esc(evName(x))}</b>${tk ? `<span>${esc(tk)}</span>` : ''}${rng ? `<small>${esc(rng)}</small>` : ''}`;
+    }
     return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-i="${x.s.i}" data-d="${x.key}"
-      ${movable ? `data-movable="1" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : ''} aria-label="${esc(label)}">
-      <b>${esc(x.short)}</b>${x.task && !compact ? `<span>${esc(x.task)}</span>` : ''}</button>`;
+      ${movable ? `data-movable="1" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : ''} aria-label="${esc(label)}">${inner}</button>`;
   }
 
   function renderCal() {
     const t = today(), cur = weekOf(t);
     const w = Math.max(1, Math.min(N, cur + ui.calOffset));
     const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
-    ui.calDays = days;
+    ui.calDays = days; hpx = HOUR_PX;
     const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
     const todayCol = days.findIndex(d => diff(t, d) === 0);
     $title.textContent = 'カレンダー';
@@ -244,10 +261,10 @@
     const dayH = days.map((_, k) => evs.filter(x => x.col === k && x.done).reduce((h, x) => h + x.s.hours, 0));
 
     const head = days.map((d, k) =>
-      `<div class="dh${k === todayCol ? ' today' : ''}"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></div>`).join('');
+      `<button class="dh${k === todayCol ? ' today' : ''}" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の予定を開く"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></button>`).join('');
 
     const allday = days.map((_, k) =>
-      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, true)).join('')}</div>`).join('');
+      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip')).join('')}</div>`).join('');
 
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
@@ -291,7 +308,7 @@
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
       <div class="cal-foot">
-        <p class="small faint">タップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。</p>
+        <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
@@ -335,6 +352,154 @@
       render();
       toast(on ? `記録しました${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}` : '未完了に戻しました');
     });
+  }
+
+
+  // ---------- 日ごとのページ ----------
+  const atMin = (d, m) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, m).getTime();
+  const fmtLeft = ms => {
+    const t = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), x = t % 60;
+    return h ? `${h}:${pad(m)}:${pad(x)}` : `${m}:${pad(x)}`;
+  };
+  const clock = () => { const n = new Date(); return `${n.getHours()}:${pad(n.getMinutes())}`; };
+  const weekDaysOf = d => { const s0 = addDays(startD(), 7 * (rawWeek(d) - 1)); return Array.from({ length: 7 }, (_, k) => addDays(s0, k)); };
+  function ring(p) {
+    const r = 33, c = 2 * Math.PI * r;
+    return `<svg class="ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" class="ring-bg"/><circle cx="40" cy="40" r="${r}" class="ring-fg" stroke-dasharray="${(c * Math.min(1, p)).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/></svg>`;
+  }
+
+  function renderDay() {
+    const t = today(), d = parse(ui.day);
+    const isT = diff(t, d) === 0;
+    const w = weekOf(d);
+    const days = weekDaysOf(d), col = diff(days[0], d);
+    ui.calDays = [d]; hpx = DAY_HPX;
+    const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+    $title.textContent = isT ? '今日' : mdw(d);
+
+    const all = weekEvents(days);
+    const evs = all.filter(x => x.col === col);
+    const timed = evs.filter(x => x.a != null), allday = evs.filter(x => x.a == null);
+    const study = evs.filter(x => x.p.type === 'study');
+    const planH = study.reduce((h, x) => h + x.s.hours, 0);
+    const doneH = study.filter(x => x.done).reduce((h, x) => h + x.s.hours, 0);
+    const doneN = study.filter(x => x.done).length;
+
+    const strip = days.map((x, k) => {
+      const h = all.filter(e => e.col === k && e.done).reduce((n, e) => n + e.s.hours, 0);
+      return `<button class="ds${k === col ? ' sel' : ''}${diff(t, x) === 0 ? ' today' : ''}" data-action="dayjump" data-d="${ymd(x)}" aria-label="${mdw(x)}"${k === col ? ' aria-current="date"' : ''}>
+        <span>${DAYS[x.getDay()]}</span><b class="num">${x.getDate()}</b><i>${h > 0 ? '●' : ''}</i></button>`;
+    }).join('');
+
+    layoutLanes(timed);
+    const hours = [];
+    for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * DAY_HPX}px">${h}:00</span>`);
+    const blocks = timed.map(x => {
+      const top = (x.a - MIN_H * 60) / 60 * DAY_HPX, hgt = (x.b - x.a) / 60 * DAY_HPX, lw = 100 / x.lanes;
+      const pos = `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px;left:calc(${(x.lane * lw).toFixed(3)}% + 3px);width:calc(${lw.toFixed(3)}% - 7px)`;
+      return evHtml(x, pos, isT && nowMin >= x.a && nowMin < x.b, 'day');
+    }).join('');
+    const line = isT && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
+      ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * DAY_HPX).toFixed(1)}px"></div>` : '';
+
+    // 右側：今のコマ
+    let nowCard;
+    const rangeBox = x => { const r = x.p.type === 'study' ? evRange(x) : ''; return r ? `<div class="rg2"><b>今週の範囲</b>${esc(r)}</div>` : ''; };
+    if (isT) {
+      const cur = timed.filter(x => nowMin >= x.a && nowMin < x.b).sort((p, q) => (q.p.type === 'study') - (p.p.type === 'study'))[0];
+      const next = timed.filter(x => x.a > nowMin).sort((p, q) => p.a - q.a)[0];
+      if (cur) {
+        const s0 = atMin(d, cur.a), e0 = atMin(d, cur.b);
+        const btn = cur.p.type !== 'study' ? ''
+          : cur.done ? '<div class="pill good">✓ 終わった</div>'
+            : `<button class="btn primary small" data-action="quickdone" data-i="${cur.s.i}" data-d="${cur.key}">終わった（＋${fmtH(cur.s.hours)}h）</button>`;
+        nowCard = `<div class="card side now-card" style="--c:${cur.c || 'var(--faint)'}">
+          <div class="k"><span><span class="live"></span>${cur.p.type === 'lecture' ? '講義中' : 'いまのコマ'}</span><span class="clock num" data-clock>${clock()}</span></div>
+          <div class="nm">${esc(evName(cur))}</div><div class="tk">${esc(evTask(cur))}</div>
+          <div class="big num"><small>残り</small><span data-cd="${e0}">${fmtLeft(e0 - Date.now())}</span></div>
+          <div class="bar thin"><i data-prog="${s0},${e0}" style="width:${Math.min(100, (Date.now() - s0) / (e0 - s0) * 100).toFixed(1)}%"></i></div>
+          <div class="s num">${hm(cur.a)}〜${hm(cur.b)}</div>${rangeBox(cur)}${btn}</div>`;
+      } else if (next) {
+        const s0 = atMin(d, next.a);
+        nowCard = `<div class="card side now-card idle" style="--c:${next.c || 'var(--faint)'}">
+          <div class="k"><span>次のコマ</span><span class="clock num" data-clock>${clock()}</span></div>
+          <div class="nm">${esc(evName(next))}</div><div class="tk">${esc(evTask(next))}</div>
+          <div class="big num"><small>始まるまで</small><span data-cd="${s0}">${fmtLeft(s0 - Date.now())}</span></div>
+          <div class="s num">${hm(next.a)}〜${hm(next.b)}</div>${rangeBox(next)}</div>`;
+      } else {
+        nowCard = `<div class="card side now-card idle">
+          <div class="k"><span>今日のコマ</span><span class="clock num" data-clock>${clock()}</span></div>
+          <div class="nm">おしまい</div><div class="s">${study.length ? `${doneN} / ${study.length} コマ終わりました` : '今日は勉強のコマがありません'}</div></div>`;
+      }
+    } else {
+      nowCard = `<div class="card side now-card idle">
+        <div class="k"><span>${diff(t, d) > 0 ? 'この日の予定' : 'この日の結果'}</span></div>
+        <div class="nm num">${study.length} コマ</div><div class="s">予定 ${fmtH(planH)}h · 講義 ${evs.filter(x => x.p.type === 'lecture').length}コマ</div></div>`;
+    }
+
+    const tgt = target(w), act = actual(w), left = diff(t, examD());
+    const note = range(w, 7);
+    const side = `
+      ${nowCard}
+      <div class="card side">
+        <div class="k"><span>${isT ? '今日' : 'この日'}の勉強</span></div>
+        <div class="ringwrap">${ring(planH ? doneH / planH : 0)}<div class="ring-txt"><b class="num">${fmtH(doneH)}</b><small>/ ${fmtH(planH)}h</small></div></div>
+        <div class="s c">${doneN} / ${study.length} コマ完了</div>
+      </div>
+      <div class="card side">
+        <div class="k"><span>第${w}週</span><span class="faint">${pct(act, tgt)}%</span></div>
+        <div class="mid num"><b>${fmtH(act)}</b><small> / ${fmtH(tgt)}h</small></div>
+        <div class="bar thin${act >= tgt && tgt > 0 ? ' good' : ''}"><i style="width:${pct(act, tgt)}%"></i></div>
+        <div class="s">${act >= tgt ? '目標達成' : `あと ${fmtH(tgt - act)}h`}</div>
+      </div>
+      <div class="card side exam">
+        <div class="k"><span>1次試験まで</span></div>
+        <div class="mid num"><b>${left > 0 ? left : left === 0 ? '今日' : '終了'}</b>${left > 0 ? '<small> 日</small>' : ''}</div>
+        <div class="s">${mdw(examD())}${left > 0 ? ` · あと約${Math.round(left / 7)}週` : ''}</div>
+      </div>
+      ${note ? `<div class="card side note"><div class="k"><span>今週のメモ</span></div><div class="s">${esc(note)}</div></div>` : ''}`;
+
+    return `
+      <div class="dayhead">
+        <button class="btn ghost small" data-action="dayback">‹ 週</button>
+        <div class="mid"><b>${mdw(d)}</b><span class="sub">第${w}週 · ${esc(W(w).phase)}</span></div>
+        ${isT ? '<span class="pill accent">今日</span>' : '<button class="btn ghost small" data-action="daytoday">今日</button>'}
+      </div>
+      <div class="daystrip">
+        <button class="navbtn" data-action="dayshift" data-v="-1" aria-label="前の日">‹</button>${strip}<button class="navbtn" data-action="dayshift" data-v="1" aria-label="次の日">›</button>
+      </div>
+      <div class="dayview">
+        <div class="day-main">
+          <div class="cal day" style="--hpx:${DAY_HPX}px">
+            ${allday.length ? `<div class="cal-row1 cal-allday"><div class="gutter">終日</div><div class="ad" data-col="0">${allday.map(x => evHtml(x, '', false, 'day')).join('')}</div></div>` : ''}
+            <div class="cal-row1 cal-body" style="height:${(MAX_H - MIN_H) * DAY_HPX}px"><div class="gutter">${hours.join('')}</div><div class="col${isT ? ' today' : ''}" data-col="0">${blocks}${line}</div></div>
+          </div>
+        </div>
+        <aside class="day-side" aria-label="この日のまとめ">${side}</aside>
+      </div>`;
+  }
+
+  // 残り時間と時計を1秒ごとに進める（画面全体は描き直さない）
+  setInterval(() => {
+    if (document.hidden || ui.tab !== 'cal' || !ui.day) return;
+    const now = Date.now();
+    let expired = false;
+    $view.querySelectorAll('[data-cd]').forEach(el => {
+      const left = +el.dataset.cd - now;
+      if (left <= 0) expired = true; else el.textContent = fmtLeft(left);
+    });
+    $view.querySelectorAll('[data-prog]').forEach(el => {
+      const [a, b] = el.dataset.prog.split(',').map(Number);
+      el.style.width = `${Math.min(100, Math.max(0, (now - a) / (b - a) * 100)).toFixed(2)}%`;
+    });
+    $view.querySelectorAll('[data-clock]').forEach(el => { el.textContent = clock(); });
+    if (expired && !drag && !$dlg.open) render();   // コマが終わった／始まったら切り替える
+  }, 1000);
+
+  function backToWeek() {
+    const d = parse(ui.day);
+    ui.day = null;
+    ui.calOffset = weekOf(d) - weekOf(today());
   }
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
@@ -415,12 +580,12 @@
       return;
     }
     const r = cell.getBoundingClientRect();
-    let a = MIN_H * 60 + (drag.y - drag.grabY - r.top) / HOUR_PX * 60;
+    let a = MIN_H * 60 + (drag.y - drag.grabY - r.top) / hpx * 60;
     a = Math.round(a / SNAP) * SNAP;
     a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - drag.dur, a));
     drag.target = { col: k, a };
-    g.style.top = `${((a - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px`;
-    g.style.height = `${(drag.dur / 60 * HOUR_PX - 2).toFixed(1)}px`;
+    g.style.top = `${((a - MIN_H * 60) / 60 * hpx).toFixed(1)}px`;
+    g.style.height = `${(drag.dur / 60 * hpx - 2).toFixed(1)}px`;
     g.style.left = '2px'; g.style.width = 'calc(100% - 5px)';
     g.querySelector('.gt').textContent = `${hm(a)}〜${hm(a + drag.dur)}`;
     if (g.parentNode !== cell) cell.appendChild(g);
@@ -854,7 +1019,10 @@
   }
 
   function switchTab(tab) {
-    if (ui.tab === tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (ui.tab === tab) {
+      if (tab === 'cal' && ui.day) { backToWeek(); render(); window.scrollTo(0, 0); return; }
+      window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+    }
     ui.tab = tab; ui.edit = false;
     render(); window.scrollTo(0, 0);
   }
@@ -873,6 +1041,14 @@
         const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
       case 'slot': openSlot(+el.dataset.i, el.dataset.d); break;
+      case 'openday': case 'dayjump': ui.day = el.dataset.d; ui.scrollNow = true; render(); break;
+      case 'dayshift': ui.day = ymd(addDays(parse(ui.day), +el.dataset.v)); ui.scrollNow = true; render(); break;
+      case 'daytoday': ui.day = ymd(today()); ui.scrollNow = true; render(); break;
+      case 'dayback': backToWeek(); render(); window.scrollTo(0, 0); break;
+      case 'quickdone': {
+        const i = +el.dataset.i, on = toggleCheck(el.dataset.d, i);
+        render(); toast(on ? `記録しました（＋${fmtH(SLOTS[i].hours)}h）` : '未完了に戻しました'); break;
+      }
       case 'unmove-week': {
         const keys = new Set((ui.calDays || []).map(ymd));
         Object.keys(S.moves).forEach(k => { if (keys.has(k.split('|')[0])) delete S.moves[k]; });
