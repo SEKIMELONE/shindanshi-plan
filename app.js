@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false } },
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9' } },
       weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '' },
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
@@ -518,6 +518,8 @@
 
   // ---------- Googleカレンダー連携（Apps Script 経由。アプリ → カレンダーの一方向） ----------
   // 今週・来週・表示中の週について、中身が前回送ったときから変わっていたら1週間分まるごと送る
+  // Googleカレンダーの予定の色（番号は Google の決まり。8 グラファイトは「終わった」用）
+  const GCAL_COLORS = [['9', 'ブルーベリー'], ['7', 'ピーコック'], ['10', 'バジル'], ['2', 'セージ'], ['3', 'ブドウ'], ['1', 'ラベンダー'], ['4', 'フラミンゴ'], ['11', 'トマト'], ['6', 'ミカン'], ['5', 'バナナ'], ['subject', '科目ごと']];
   const GCOLOR = { '財務・会計': '9', '経済学': '10', '企業経営理論': '6', '運営管理': '3', '経営情報システム': '7', '経営法務': '5', '中小企業経営・政策': '4' };
   const gcalOn = () => !!(S.settings.gcal.url && S.settings.gcal.token);
   const hashStr = str => { let h = 5381; for (let i = 0; i < str.length; i++) h = (h * 33 + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
@@ -534,7 +536,7 @@
           title: study ? `${x.done ? '✓ ' : ''}${evName(x)}${tk ? `：${tk}` : ''}` : `${evName(x)}（講義）`,
           start: atMin(x.shown, x.a), end: atMin(x.shown, x.b),
           desc: [rng && `今週の範囲：${rng}`, `第${w}週・${W(w).phase}`, '診断士プランから自動で作成（アプリで動かすと、ここも動きます）'].filter(Boolean).join('\n'),
-          color: !study ? '1' : x.done ? '8' : (GCOLOR[SUBJ[x.idxs[0]]] || '8'),
+          color: !study ? '1' : x.done ? '8' : S.settings.gcal.color === 'subject' ? (GCOLOR[SUBJ[x.idxs[0]]] || '8') : S.settings.gcal.color,
         };
       });
     return { from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0), events };
@@ -1035,6 +1037,7 @@
         <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（今週・来週・表示中の週）。動かす・「終わった」にすると、カレンダー側も変わります。記録をつける端末1台だけで設定してください。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
         <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
+        <label class="field"><span>予定の色（「終わった」はグレー）</span><select name="gcolor">${GCAL_COLORS.map(([v, n]) => `<option value="${v}" ${st.gcal.color === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="check-row"><input name="glect" type="checkbox" ${st.gcal.lectures ? 'checked' : ''}> 講義も入れる</label>
         <div class="btns">
           <button class="btn small" type="button" data-dlg="gtest">接続テスト</button>
@@ -1072,7 +1075,7 @@
         const url = fval('gurl').trim(), token = fval('gtoken').trim();
         if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url) || !token) { toast('URL（https://script.google.com/…）と合言葉を入れてください'); return false; }
         const prev = S.settings.gcal;
-        S.settings.gcal = { url, token, lectures: !!$form.elements.glect.checked };
+        S.settings.gcal = { url, token, lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
         if (act === 'gtest') {
           gcalPost({ ping: true })
             .then(j => toast(`つながりました（カレンダー「${j.calendar}」）`))
@@ -1099,8 +1102,8 @@
       }
       const start = fval('start'), exam = fval('exam');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(exam)) { toast('日付を入れてください'); return false; }
-      const gcal = { url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked };
-      if (JSON.stringify(gcal) !== JSON.stringify(st.gcal)) S.gsync = { hash: {}, last: 0, err: '' };   // 設定が変わったら全部送り直す
+      const gcal = { url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
+      if (gcal.url !== st.gcal.url || gcal.token !== st.gcal.token) S.gsync = { hash: {}, last: 0, err: '' };   // つなぎ先が変わったら全部送り直す   // 設定が変わったら全部送り直す
       S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
       save(); render();
       toast(parse(start).getDay() === 1 ? '保存しました' : '保存しました（開始日が月曜ではありません）');
