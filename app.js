@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto' }, weeks: {}, checks: {},
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto' }, weeks: {}, checks: {}, moves: {},
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
   function normalize(s) {
@@ -22,6 +22,7 @@
       settings: { ...b.settings, ...(s.settings || {}) },
       weeks: s.weeks || {},
       checks: s.checks || {},
+      moves: s.moves || {},
       ov: { plan: ov.plan || {}, target: ov.target || {}, pattern: ov.pattern || {}, tt: ov.tt || {}, gantt: ov.gantt || {} },
     };
   }
@@ -143,11 +144,20 @@
   // ---------- カレンダー（メイン画面） ----------
   const SHORT = { '財務・会計': '財務', '経済学': '経済', '企業経営理論': '企業', '運営管理': '運営', '経営情報システム': '情報', '経営法務': '法務', '中小企業経営・政策': '中小' };
   const HOUR_PX = 52;
+  const SNAP = 10;                       // 移動は10分刻み（大学の時限が10分単位なので）
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = Math.ceil(Math.max(...TIMED.map(s => s.b)) / 60);
+  const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
-  // ある日の1コマを表示用にまとめる
+  // 移動したコマ。キーは「元の日付|時間割の行」。同じ週の中でしか動かせない
+  const moveKey = (key, i) => `${key}|${i}`;
+  function getMove(key, i) {
+    const m = S.moves[moveKey(key, i)];
+    return m && rawWeek(parse(m.d)) === rawWeek(parse(key)) ? m : null;
+  }
+
+  // ある日の1コマを表示用にまとめる（date は元の日付）
   function slotInfo(s, date) {
     const w = weekOf(date);
     const text = ttCell(s.i, patIdx(pattern(w)));
@@ -159,13 +169,54 @@
     const task = p.type === 'study' && !p.task.startsWith(subjName) ? p.task : '';
     const c = p.type === 'study' ? (idxs.length ? color(SUBJ[idxs[0]]) : color(OTHER)) : '';
     const key = ymd(date);
-    return { s, w, date, key, text, p, idxs, subjName, short, task, c, done: !!(S.checks[key] || {})[s.i] };
+    const mv = getMove(key, s.i);
+    const a = s.a == null ? null : (mv && mv.a != null ? mv.a : s.a);
+    return {
+      s, w, date, key, text, p, idxs, subjName, short, task, c,
+      done: !!(S.checks[key] || {})[s.i],
+      shown: mv ? parse(mv.d) : date, a, b: a == null ? null : a + (s.b - s.a), moved: !!mv,
+    };
+  }
+
+  // 1週間ぶんのコマ（移動後の位置で）
+  function weekEvents(days) {
+    const evs = [];
+    days.forEach(d => SLOTS.forEach(s => {
+      if (s.day !== '毎日' && s.day !== DAYS[d.getDay()]) return;
+      const x = slotInfo(s, d);
+      if (x) { x.col = diff(days[0], x.shown); evs.push(x); }
+    }));
+    return evs;
+  }
+
+  // 重なったコマを横に並べる（Googleカレンダーと同じ考え方）
+  function layoutLanes(evs) {
+    evs.sort((p, q) => p.a - q.a || (q.b - q.a) - (p.b - p.a));
+    let group = [], end = -Infinity;
+    const flush = () => {
+      const lanes = [];
+      group.forEach(e => {
+        let l = lanes.findIndex(x => x <= e.a);
+        if (l < 0) { l = lanes.length; lanes.push(0); }
+        lanes[l] = e.b; e.lane = l;
+      });
+      group.forEach(e => { e.lanes = lanes.length; });
+      group = [];
+    };
+    evs.forEach(e => {
+      if (group.length && e.a >= end) { flush(); end = -Infinity; }
+      group.push(e); end = Math.max(end, e.b);
+    });
+    if (group.length) flush();
   }
 
   function evHtml(x, style, isNow, compact) {
-    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : ''].join(' ');
-    const label = `${mdw(x.date)} ${x.s.day === '毎日' ? '' : x.s.period} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}`;
-    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-i="${x.s.i}" data-d="${x.key}" aria-label="${esc(label)}">
+    const movable = x.p.type === 'study';
+    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : ''].join(' ');
+    const when = x.a == null ? '' : ` ${hm(x.a)}〜${hm(x.b)}`;
+    const label = `${mdw(x.shown)}${when} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}${x.moved ? '（移動済み）' : ''}`;
+    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-i="${x.s.i}" data-d="${x.key}"
+      ${movable ? `data-movable="1" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : ''} aria-label="${esc(label)}">
       <b>${esc(x.short)}</b>${x.task && !compact ? `<span>${esc(x.task)}</span>` : ''}</button>`;
   }
 
@@ -173,7 +224,9 @@
     const t = today(), cur = weekOf(t);
     const w = Math.max(1, Math.min(N, cur + ui.calOffset));
     const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
+    ui.calDays = days;
     const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+    const todayCol = days.findIndex(d => diff(t, d) === 0);
     $title.textContent = 'カレンダー';
 
     const left = diff(t, examD());
@@ -187,32 +240,34 @@
     const note = range(w, 7);
     if (note) banners += `<div class="banner"><span><b>今週のメモ</b>　${esc(note)}</span></div>`;
 
-    const head = days.map(d => {
-      const isT = diff(t, d) === 0, h = dayHours(ymd(d));
-      return `<div class="dh${isT ? ' today' : ''}"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${h > 0 ? `${fmtH(h)}h` : ''}</span></div>`;
-    }).join('');
+    const evs = weekEvents(days);
+    const dayH = days.map((_, k) => evs.filter(x => x.col === k && x.done).reduce((h, x) => h + x.s.hours, 0));
 
-    const allday = days.map(d => {
-      const chips = SLOTS.filter(s => s.a == null && (s.day === '毎日' || s.day === DAYS[d.getDay()]))
-        .map(s => slotInfo(s, d)).filter(Boolean).map(x => evHtml(x, '', false, true)).join('');
-      return `<div class="ad">${chips}</div>`;
-    }).join('');
+    const head = days.map((d, k) =>
+      `<div class="dh${k === todayCol ? ' today' : ''}"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></div>`).join('');
+
+    const allday = days.map((_, k) =>
+      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, true)).join('')}</div>`).join('');
 
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
-    const cols = days.map(d => {
-      const isT = diff(t, d) === 0;
-      const evs = TIMED.filter(s => s.day === DAYS[d.getDay()]).map(s => slotInfo(s, d)).filter(Boolean).map(x => {
-        const top = (x.s.a - MIN_H * 60) / 60 * HOUR_PX, hgt = (x.s.b - x.s.a) / 60 * HOUR_PX;
-        return evHtml(x, `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px`, isT && nowMin >= x.s.a && nowMin < x.s.b);
+    const cols = days.map((_, k) => {
+      const mine = evs.filter(x => x.col === k && x.a != null);
+      layoutLanes(mine);
+      const html = mine.map(x => {
+        const top = (x.a - MIN_H * 60) / 60 * HOUR_PX, hgt = (x.b - x.a) / 60 * HOUR_PX;
+        const lw = 100 / x.lanes;
+        const pos = `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px;left:calc(${(x.lane * lw).toFixed(3)}% + 2px);width:calc(${lw.toFixed(3)}% - 5px)`;
+        return evHtml(x, pos, k === todayCol && nowMin >= x.a && nowMin < x.b);
       }).join('');
-      const line = isT && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
+      const line = k === todayCol && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
         ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px"></div>` : '';
-      return `<div class="col${isT ? ' today' : ''}">${evs}${line}</div>`;
+      return `<div class="col${k === todayCol ? ' today' : ''}" data-col="${k}">${html}${line}</div>`;
     }).join('');
 
     const ranges = SUBJ.slice(0, STUDY_N).map((name, i) => [name, range(w, i)]).filter(([, r]) => r)
       .map(([name, r]) => `<li><span class="dot" style="background:${color(name)}"></span><div><div class="nm">${esc(name)}</div><div class="tx">${esc(r)}</div></div></li>`).join('');
+    const movedN = evs.filter(x => x.moved).length;
 
     return `
       <div class="calnav">
@@ -235,7 +290,10 @@
         <div class="cal-row cal-allday"><div class="gutter">終日</div>${allday}</div>
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
-      <p class="small faint" style="margin:6px 2px 0">コマをタップ →「終わった」で勉強時間が記録されます</p>
+      <div class="cal-foot">
+        <p class="small faint">タップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。</p>
+        ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
+      </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
       <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
   }
@@ -259,19 +317,143 @@
     const s = x.s, study = x.p.type === 'study';
     const rng = x.idxs.map(j => [j, range(x.w, j)]).filter(([, r]) => r);
     const title = x.p.type === 'lecture' ? x.p.task : (x.subjName || x.p.task);
+    const when = x.a == null ? (s.day === '毎日' ? '毎日' : esc(s.time)) : `${hm(x.a)}〜${hm(x.b)}`;
+    const orig = `${mdw(x.date)} ${s.day === '毎日' ? '' : esc(s.period)}${s.a == null ? '' : `（${hm(s.a)}〜${hm(s.b)}）`}`;
     openDlg(`<h2>${esc(title)}</h2>
-      <p class="small muted">${mdw(x.date)} · ${s.day === '毎日' ? '毎日' : esc(s.period)} · ${esc(s.time)}${x.done ? ' · <span class="pill good">✓ 完了</span>' : ''}</p>
+      <p class="small muted">${mdw(x.shown)} · ${when}${x.done ? ' · <span class="pill good">✓ 完了</span>' : ''}</p>
+      ${x.moved ? `<p class="small faint">移動済み。元は ${orig}</p>` : ''}
       <p>${x.p.type === 'lecture' ? '<span class="muted">講義（参考として表示）</span>' : esc(x.text)}</p>
       ${rng.length ? `<div class="field"><span>この週の範囲</span>${rng.map(([j, r]) => `<div class="rg"><span class="dot" style="background:${color(SUBJ[j])}"></span><span>${rng.length > 1 ? `<b>${esc(SUBJ[j])}</b>　` : ''}${esc(r)}</span></div>`).join('')}</div>` : ''}
-      <div class="dlg-actions"><span class="spacer"></span>
+      <div class="dlg-actions">
+        ${x.moved ? '<button class="btn ghost" data-dlg="unmove" type="button">元の時間に戻す</button>' : ''}<span class="spacer"></span>
         <button class="btn" data-dlg="cancel" type="button">閉じる</button>
         ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}`}</button>` : ''}
       </div>`, act => {
+      if (act === 'unmove') { delete S.moves[moveKey(key, i)]; save(); render(); toast('元の時間に戻しました'); return; }
       if (act !== 'toggle') return;
       const on = toggleCheck(key, i);
       render();
       toast(on ? `記録しました${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}` : '未完了に戻しました');
     });
+  }
+
+  // ---------- ドラッグで移動（同じ週の中だけ） ----------
+  // マウスは押して動かすとすぐ、タッチは長押ししてから動かす（普通のスクロールと区別するため）
+  let drag = null;
+  let dragEndedAt = 0;
+  const LONG_PRESS = 350;
+
+  $view.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.ev[data-movable]');
+    if (!el || e.button > 0 || ui.tab !== 'cal') return;
+    drag = { el, id: e.pointerId, mouse: e.pointerType === 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false };
+    if (!drag.mouse) drag.timer = setTimeout(startDrag, LONG_PRESS);
+  });
+  addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (!drag.active) {
+      const dist = Math.hypot(drag.x - drag.x0, drag.y - drag.y0);
+      if (drag.mouse && dist > 4) startDrag();
+      else if (!drag.mouse && dist > 8) cancelPress();   // 長押し前に指が動いた＝スクロール
+      return;
+    }
+    e.preventDefault();
+    placeGhost();
+  }, { passive: false });
+  addEventListener('pointerup', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.active) endDrag(true); else cancelPress();
+  });
+  addEventListener('pointercancel', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.active) endDrag(false); else cancelPress();
+  });
+  // ドラッグ中は画面がスクロールしないように
+  addEventListener('touchmove', e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+  $view.addEventListener('contextmenu', e => { if (e.target.closest('.ev')) e.preventDefault(); });
+
+  function cancelPress() {
+    if (drag) clearTimeout(drag.timer);
+    drag = null;
+  }
+
+  function startDrag() {
+    if (!drag || drag.active) return;
+    clearTimeout(drag.timer);
+    const el = drag.el, r = el.getBoundingClientRect();
+    drag.active = true;
+    drag.allDay = el.dataset.allday === '1';
+    drag.dur = +el.dataset.dur;
+    drag.grabY = drag.y0 - r.top;
+    const g = el.cloneNode(true);
+    g.classList.add('ghost');
+    g.removeAttribute('data-action');
+    g.setAttribute('aria-hidden', 'true');
+    g.insertAdjacentHTML('afterbegin', '<i class="gt"></i>');
+    drag.ghost = g;
+    el.classList.add('drag-src');
+    document.body.classList.add('dragging');
+    try { el.setPointerCapture(drag.id); } catch (err) { /* 古いブラウザ */ }
+    if (navigator.vibrate) navigator.vibrate(10);
+    placeGhost();
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
+  // 指（マウス）の位置から、置き先の曜日と時刻を決める
+  function placeGhost() {
+    const sel = drag.allDay ? '.cal-allday .ad' : '.cal-body .col';
+    const cells = [...$view.querySelectorAll(sel)];
+    if (!cells.length) return;
+    let k = cells.findIndex(c => { const r = c.getBoundingClientRect(); return drag.x >= r.left && drag.x < r.right; });
+    if (k < 0) k = drag.x < cells[0].getBoundingClientRect().left ? 0 : cells.length - 1;
+    const cell = cells[k], g = drag.ghost;
+    if (drag.allDay) {
+      drag.target = { col: k, a: null };
+      g.querySelector('.gt').textContent = '';
+      if (g.parentNode !== cell) cell.appendChild(g);
+      return;
+    }
+    const r = cell.getBoundingClientRect();
+    let a = MIN_H * 60 + (drag.y - drag.grabY - r.top) / HOUR_PX * 60;
+    a = Math.round(a / SNAP) * SNAP;
+    a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - drag.dur, a));
+    drag.target = { col: k, a };
+    g.style.top = `${((a - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px`;
+    g.style.height = `${(drag.dur / 60 * HOUR_PX - 2).toFixed(1)}px`;
+    g.style.left = '2px'; g.style.width = 'calc(100% - 5px)';
+    g.querySelector('.gt').textContent = `${hm(a)}〜${hm(a + drag.dur)}`;
+    if (g.parentNode !== cell) cell.appendChild(g);
+  }
+
+  // 画面の上下の端に近づいたら自動でスクロール
+  function autoScroll() {
+    if (!drag || !drag.active) return;
+    const topEdge = 110, bottomEdge = innerHeight - 90;
+    let dy = 0;
+    if (drag.y < topEdge) dy = -Math.min(14, (topEdge - drag.y) / 4);
+    else if (drag.y > bottomEdge) dy = Math.min(14, (drag.y - bottomEdge) / 4);
+    if (dy) { scrollBy(0, dy); placeGhost(); }
+    drag.raf = requestAnimationFrame(autoScroll);
+  }
+
+  function endDrag(commit) {
+    const { el, ghost, target } = drag;
+    cancelAnimationFrame(drag.raf);
+    ghost.remove();
+    el.classList.remove('drag-src');
+    document.body.classList.remove('dragging');
+    dragEndedAt = Date.now();
+    drag = null;
+    if (!commit || !target || !ui.calDays) return;
+    const key = el.dataset.d, i = +el.dataset.i, s = SLOTS[i];
+    const day = ui.calDays[target.col], nk = ymd(day);
+    const k = moveKey(key, i), before = S.moves[k];
+    if (nk === key && (s.a == null || target.a === s.a)) delete S.moves[k];
+    else S.moves[k] = s.a == null ? { d: nk } : { d: nk, a: target.a };
+    if (JSON.stringify(before) === JSON.stringify(S.moves[k])) return;
+    save(); render();
+    toast(S.moves[k] ? `${mdw(day)}${target.a == null ? '' : ` ${hm(target.a)}`} に移動しました` : '元の時間に戻しました');
   }
 
   // ---------- 週 ----------
@@ -577,6 +759,7 @@
   function openSettings() {
     const st = S.settings;
     const editedN = Object.values(S.ov).reduce((n, m) => n + Object.keys(m).length, 0);
+    const movesN = Object.keys(S.moves).length;
     openDlg(`<h2>設定</h2>
       <div class="row2">
         <label class="field"><span>学習開始日</span><input name="start" type="date" value="${esc(st.start)}" required></label>
@@ -594,6 +777,7 @@
           <button class="btn small" type="button" data-dlg="export">書き出す</button>
           <button class="btn small" type="button" data-dlg="import">読み込む</button>
           ${editedN ? `<button class="btn small" type="button" data-dlg="reset-ov">計画の編集を元に戻す（${editedN}件）</button>` : ''}
+          ${movesN ? `<button class="btn small" type="button" data-dlg="reset-moves">カレンダーの移動を元に戻す（${movesN}件）</button>` : ''}
           <button class="btn small danger" type="button" data-dlg="wipe">記録をすべて消す</button>
         </div>
       </div>`, act => {
@@ -603,8 +787,12 @@
         if (!confirm('計画・時間割・ガントチャートの編集を、スプレッドシートの内容に戻します。勉強時間の記録とメモは残ります。')) return false;
         S.ov = blank().ov; save(); render(); toast('元に戻しました'); return;
       }
+      if (act === 'reset-moves') {
+        if (!confirm('カレンダーで動かしたコマを、すべて時間割どおりの位置に戻します。')) return false;
+        S.moves = {}; save(); render(); toast('元に戻しました'); return;
+      }
       if (act === 'wipe') {
-        if (!confirm('勉強時間、チェック、メモ、編集をすべて消します。元に戻せません。先に書き出しておくと安全です。')) return false;
+        if (!confirm('勉強時間、チェック、メモ、編集、カレンダーの移動をすべて消します。元に戻せません。先に書き出しておくと安全です。')) return false;
         S = blank(); save(); render(); toast('消しました'); return;
       }
       const start = fval('start'), exam = fval('exam');
@@ -685,6 +873,11 @@
         const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
       case 'slot': openSlot(+el.dataset.i, el.dataset.d); break;
+      case 'unmove-week': {
+        const keys = new Set((ui.calDays || []).map(ymd));
+        Object.keys(S.moves).forEach(k => { if (keys.has(k.split('|')[0])) delete S.moves[k]; });
+        save(); render(); toast('この週の移動を元に戻しました'); break;
+      }
       case 'openweek': ui.week = +el.dataset.w || null; ui.tab = 'week'; ui.edit = false; render(); window.scrollTo(0, 0); break;
       case 'week': ui.week = Math.max(1, Math.min(N, curW() + +el.dataset.v)); render(); break;
       case 'goweek': {
@@ -708,6 +901,7 @@
     }
   }
   $view.addEventListener('click', e => {
+    if (Date.now() - dragEndedAt < 400) return;   // ドラッグを離したときのクリックは無視
     const el = e.target.closest('[data-action]');
     if (el && $view.contains(el)) onAction(el);
   });
@@ -733,13 +927,13 @@
   // 開きっぱなしでも「今」のコマと日付が進むように
   let lastDay = ymd(today());
   function tick() {
-    if (document.hidden || $dlg.open || document.activeElement?.matches('textarea')) return;
+    if (document.hidden || $dlg.open || drag || document.activeElement?.matches('textarea')) return;
     const d = ymd(today());
     if (ui.tab === 'cal' || d !== lastDay) { lastDay = d; render(); }
   }
   setInterval(tick, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
-  addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+  addEventListener('storage', e => { if (e.key === KEY && !drag) { S = load(); render(); } });
 
   render();
 
