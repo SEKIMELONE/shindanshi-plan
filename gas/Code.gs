@@ -5,6 +5,7 @@
  *    アプリ → カレンダーの一方向。カレンダー側で予定を動かしても、アプリには戻らない。
  * 2. アプリの記録（勉強時間・チェック・メモ・移動・計画の編集）を保管する。
  *    端末のデータが消えても、URLと合言葉を入れ直せば戻る。スマホとPCで記録を共有できる。
+ * 3. 自分のカレンダー（共有されている大学のカレンダーなども）の予定を読んで、アプリに渡す（読むだけ）。
  *
  * 準備（最初の1回だけ）
  *  1. https://script.google.com で「新しいプロジェクト」を作り、このファイルの中身を全部貼り付けて保存
@@ -74,6 +75,8 @@ function saveState_(updatedAt, data) {
 //  { token, ping }                                  … 接続テスト
 //  { token, op: 'load' }                            … 保管している記録を返す
 //  { token, op: 'save', updatedAt, data }           … 記録を保管（こちらの方が新しいときだけ）
+//  { token, op: 'cals' }                            … 読めるカレンダーの一覧
+//  { token, op: 'read', ids, from, to }             … 選んだカレンダーの予定を読む
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
 //      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
@@ -98,7 +101,33 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 2 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 3 });
+
+  if (req.op === 'cals') {
+    const cals = CalendarApp.getAllCalendars()
+      .filter(c => c.getId() !== cal.getId())
+      .map(c => ({ id: c.getId(), name: c.getName() }));
+    return out_({ ok: true, cals: cals });
+  }
+  if (req.op === 'read') {
+    const from = new Date(req.from), to = new Date(req.to), events = [];
+    (req.ids || []).forEach(id => {
+      if (id === cal.getId()) return;
+      const c = CalendarApp.getCalendarById(id);
+      if (!c) return;
+      c.getEvents(from, to).forEach(ev => {
+        const allDay = ev.isAllDayEvent();
+        events.push({
+          title: ev.getTitle() || '予定あり',
+          start: (allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(),
+          end: (allDay ? ev.getAllDayEndDate() : ev.getEndTime()).getTime(),
+          allDay: allDay,
+          cal: c.getName(),
+        });
+      });
+    });
+    return out_({ ok: true, events: events });
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(25000);

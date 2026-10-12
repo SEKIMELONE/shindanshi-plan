@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9' } },
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true } },
       weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '', clast: 0, cerr: '' }, updatedAt: 0,
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
@@ -268,25 +268,27 @@
     const note = range(w, 7);
     if (note) banners += `<div class="banner"><span><b>今週のメモ</b>　${esc(note)}</span></div>`;
 
-    const evs = weekEvents(days);
+    const evs = weekEvents(days).filter(showEv);
+    const exts = extEvents(days);
+    extEnsure(days);
     const dayH = days.map((_, k) => evs.filter(x => x.col === k && x.done).reduce((h, x) => h + x.s.hours, 0));
 
     const head = days.map((d, k) =>
       `<button class="dh${k === todayCol ? ' today' : ''}" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の予定を開く"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></button>`).join('');
 
     const allday = days.map((_, k) =>
-      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip')).join('')}</div>`).join('');
+      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip')).join('')}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}</div>`).join('');
 
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
     const cols = days.map((_, k) => {
-      const mine = evs.filter(x => x.col === k && x.a != null);
+      const mine = evs.filter(x => x.col === k && x.a != null).concat(exts.filter(x => x.col === k && x.a != null));
       layoutLanes(mine);
       const html = mine.map(x => {
         const top = (x.a - MIN_H * 60) / 60 * HOUR_PX, hgt = (x.b - x.a) / 60 * HOUR_PX;
         const lw = 100 / x.lanes;
         const pos = `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px;left:calc(${(x.lane * lw).toFixed(3)}% + 2px);width:calc(${lw.toFixed(3)}% - 5px)`;
-        return evHtml(x, pos, k === todayCol && nowMin >= x.a && nowMin < x.b);
+        return x.ext ? extHtml(x, pos, 'week') : evHtml(x, pos, k === todayCol && nowMin >= x.a && nowMin < x.b);
       }).join('');
       const line = k === todayCol && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
         ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px"></div>` : '';
@@ -389,8 +391,10 @@
     const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
     $title.textContent = isT ? '今日' : mdw(d);
 
-    const all = weekEvents(days);
+    const all = weekEvents(days).filter(showEv);
     const evs = all.filter(x => x.col === col);
+    const extD = extEvents(days).filter(x => x.col === col);
+    extEnsure(days);
     const timed = evs.filter(x => x.a != null), allday = evs.filter(x => x.a == null);
     const study = evs.filter(x => x.p.type === 'study');
     const planH = study.reduce((h, x) => h + x.s.hours, 0);
@@ -403,13 +407,14 @@
         <span>${DAYS[x.getDay()]}</span><b class="num">${x.getDate()}</b><i>${h > 0 ? '●' : ''}</i></button>`;
     }).join('');
 
-    layoutLanes(timed);
+    const lay = timed.concat(extD.filter(x => x.a != null));
+    layoutLanes(lay);
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * DAY_HPX}px">${h}:00</span>`);
-    const blocks = timed.map(x => {
+    const blocks = lay.map(x => {
       const top = (x.a - MIN_H * 60) / 60 * DAY_HPX, hgt = (x.b - x.a) / 60 * DAY_HPX, lw = 100 / x.lanes;
       const pos = `top:${top.toFixed(1)}px;height:${(hgt - 2).toFixed(1)}px;left:calc(${(x.lane * lw).toFixed(3)}% + 3px);width:calc(${lw.toFixed(3)}% - 7px)`;
-      return evHtml(x, pos, isT && nowMin >= x.a && nowMin < x.b, 'day');
+      return x.ext ? extHtml(x, pos, 'day') : evHtml(x, pos, isT && nowMin >= x.a && nowMin < x.b, 'day');
     }).join('');
     const line = isT && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
       ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * DAY_HPX).toFixed(1)}px"></div>` : '';
@@ -492,7 +497,7 @@
       <div class="dayview">
         <div class="day-main">
           <div class="cal day" style="--hpx:${DAY_HPX}px">
-            ${allday.length ? `<div class="cal-row1 cal-allday"><div class="gutter">終日</div><div class="ad" data-col="0">${allday.map(x => evHtml(x, '', false, 'day')).join('')}</div></div>` : ''}
+            ${allday.length || extD.some(x => x.a == null) ? `<div class="cal-row1 cal-allday"><div class="gutter">終日</div><div class="ad" data-col="0">${allday.map(x => evHtml(x, '', false, 'day')).join('')}${extD.filter(x => x.a == null).map(x => extHtml(x, '', 'day')).join('')}</div></div>` : ''}
             <div class="cal-row1 cal-body" style="height:${(MAX_H - MIN_H) * DAY_HPX}px"><div class="gutter">${hours.join('')}</div><div class="col${isT ? ' today' : ''}" data-col="0">${blocks}${line}</div></div>
           </div>
         </div>
@@ -623,6 +628,7 @@
     if (!gcalOn()) { cloudReady = true; return; }
     try {
       const j = await gcalPost({ op: 'load' });
+      cloudReady = true;
       if (j.data && (j.updatedAt || 0) > (S.updatedAt || 0)) {
         applyCloud(j.data, j.updatedAt);
         toast('保管してある記録を読み込みました');
@@ -630,8 +636,8 @@
         if (!S.updatedAt) S.updatedAt = Date.now();
         cloudReady = true; cloudPush();
       }
-      cloudReady = true;
       S.gsync.cerr = ''; S.gsync.clast = Date.now();
+      if (extOn() && !$dlg.open && !drag) render();   // 自分のカレンダーの予定を読みに行く
     } catch (e) {
       // 古いスクリプトのままだと読み込めない。カレンダーへの送信も止めておく（空の記録で上書きしないため）
       S.gsync.cerr = `${e.message || e}。スクリプトを最新にしてください`;
@@ -662,6 +668,73 @@
   }
   addEventListener('online', () => { if (cloudReady) { cloudPush(); gcalSchedule(); } else cloudLoad(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && gcalOn()) cloudLoad(); });
+
+
+  // ---------- 自分のカレンダーの予定（Apps Script 経由で読むだけ） ----------
+  // 1週間（月〜日）ごとに読んで、この端末に少しだけ取っておく。5分たったら読み直す
+  const EXT_KEY = 'shindanshi-plan:ext';
+  let extCache = {};
+  try { extCache = JSON.parse(localStorage.getItem(EXT_KEY)) || {}; } catch (e) { extCache = {}; }
+  const extOn = () => gcalOn() && (S.settings.gcal.read || []).length > 0;
+  const showEv = x => !(x.p.type === 'lecture' && extOn() && S.settings.gcal.hideLect);   // 講義はカレンダー側の予定で見る
+  const extBusy = new Set();
+  const msHm = ms => { const d = new Date(ms); return hm(d.getHours() * 60 + d.getMinutes()); };
+
+  function extEnsure(days) {
+    if (!extOn() || !cloudReady) return;
+    const key = ymd(days[0]), c = extCache[key];
+    const sel = S.settings.gcal.read.map(x => x.id).join(',');
+    if (c && c.sel === sel && Date.now() - c.at < 5 * 60000) return;
+    if (extBusy.has(key) || !navigator.onLine) return;
+    extBusy.add(key);
+    gcalPost({ op: 'read', ids: S.settings.gcal.read.map(x => x.id), from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0) })
+      .then(j => {
+        const before = c && c.sel === sel ? JSON.stringify(c.events) : '';
+        extCache[key] = { at: Date.now(), sel, events: j.events || [] };
+        const keys = Object.keys(extCache).sort();
+        while (keys.length > 6) delete extCache[keys.shift()];
+        try { localStorage.setItem(EXT_KEY, JSON.stringify(extCache)); } catch (e) { /* 入らなければ取っておかないだけ */ }
+        if (before !== JSON.stringify(extCache[key].events) && !drag && !$dlg.open) render();
+      })
+      .catch(() => { /* 読めないときは前回の分を出しておく */ })
+      .finally(() => extBusy.delete(key));
+  }
+
+  // 表示用に、日ごと・時刻（分）に切り分ける。8時より前に終わる予定などは出さない
+  function extEvents(days) {
+    if (!extOn()) return [];
+    const key = ymd(days[0]), c = extCache[key];
+    if (!c) return [];
+    const out = [];
+    c.events.forEach((e, n) => days.forEach((d, k) => {
+      const d0 = atMin(d, 0), d1 = atMin(addDays(d, 1), 0);
+      if (e.end <= d0 || e.start >= d1) return;
+      if (e.allDay) { out.push({ ext: true, e, key, n, col: k, a: null, b: null }); return; }
+      const a = Math.max(MIN_H * 60, Math.round((Math.max(e.start, d0) - d0) / 60000));
+      let b = Math.min(MAX_H * 60, Math.round((Math.min(e.end, d1) - d0) / 60000));
+      if (b <= MIN_H * 60 || a >= MAX_H * 60) return;
+      if (b - a < 15) b = a + 15;
+      out.push({ ext: true, e, key, n, col: k, a, b });
+    }));
+    return out;
+  }
+
+  function extHtml(x, style, mode) {
+    const e = x.e, when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
+    return `<button class="ev ext" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
+      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}</button>`;
+  }
+
+  function openExt(key, n) {
+    const e = ((extCache[key] || {}).events || [])[n];
+    if (!e) return;
+    const s0 = new Date(e.start);
+    const when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
+    openDlg(`<h2>${esc(e.title)}</h2>
+      <p class="small muted">${mdw(s0)} · ${when}</p>
+      <p class="small faint">カレンダー「${esc(e.cal)}」の予定（アプリでは見るだけ。変えるときは Google カレンダーで）</p>
+      <div class="dlg-actions"><span class="spacer"></span><button class="btn" data-dlg="cancel" type="button">閉じる</button></div>`, () => {});
+  }
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
   // マウスは押して動かすとすぐ、タッチは長押ししてから動かす（普通のスクロールと区別するため）
@@ -1103,6 +1176,11 @@
         <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
         <label class="field"><span>予定の色（「終わった」はグレー）</span><select name="gcolor">${GCAL_COLORS.map(([v, n]) => `<option value="${v}" ${st.gcal.color === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="check-row"><input name="glect" type="checkbox" ${st.gcal.lectures ? 'checked' : ''}> 講義も入れる</label>
+        <div class="field"><span>アプリに表示する自分のカレンダー（読むだけ）</span>
+          <div id="calpick" class="calpick">${(st.gcal.read || []).map(c => `<label class="check-row"><input type="checkbox" name="rcal" value="${esc(c.id)}" data-name="${esc(c.name)}" checked> ${esc(c.name)}</label>`).join('') || '<span class="small faint">まだ選んでいません</span>'}</div>
+          <div class="btns"><button class="btn small" type="button" data-dlg="gcals">カレンダーの一覧を読み込む</button></div>
+        </div>
+        <label class="check-row"><input name="ghide" type="checkbox" ${st.gcal.hideLect ? 'checked' : ''}> カレンダーを表示するときは、時間割の講義を出さない</label>
         <div class="btns">
           <button class="btn small" type="button" data-dlg="gtest">接続テスト</button>
           ${gcalOn() ? '<button class="btn small" type="button" data-dlg="gsync">今すぐ反映</button>' : ''}
@@ -1135,11 +1213,28 @@
           .catch(() => toast('コピーできませんでした'));
         return false;
       }
+      if (act === 'gcals') {
+        const url = fval('gurl').trim(), token = fval('gtoken').trim();
+        if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url) || !token) { toast('URL（https://script.google.com/…）と合言葉を入れてください'); return false; }
+        const prev = S.settings.gcal;
+        const checked = new Set([...$form.querySelectorAll('[name=rcal]:checked')].map(i => i.value));
+        S.settings.gcal = { ...prev, url, token };
+        toast('読み込んでいます…');
+        gcalPost({ op: 'cals' })
+          .then(j => {
+            if (!j.cals) throw new Error('スクリプトを最新にしてください');
+            $form.querySelector('#calpick').innerHTML = j.cals.map(c => `<label class="check-row"><input type="checkbox" name="rcal" value="${esc(c.id)}" data-name="${esc(c.name)}" ${checked.has(c.id) ? 'checked' : ''}> ${esc(c.name)}</label>`).join('') || '<span class="small faint">カレンダーが見つかりません</span>';
+            toast('表示したいカレンダーにチェックして「保存」');
+          })
+          .catch(e => toast(`読み込めません：${e.message || e}`))
+          .finally(() => { S.settings.gcal = prev; });
+        return false;
+      }
       if (act === 'gtest' || act === 'gsync') {
         const url = fval('gurl').trim(), token = fval('gtoken').trim();
         if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url) || !token) { toast('URL（https://script.google.com/…）と合言葉を入れてください'); return false; }
         const prev = S.settings.gcal;
-        S.settings.gcal = { url, token, lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
+        S.settings.gcal = { ...prev, url, token, lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
         if (act === 'gtest') {
           gcalPost({ ping: true })
             .then(j => toast(`つながりました（カレンダー「${j.calendar}」）`))
@@ -1170,7 +1265,11 @@
       }
       const start = fval('start'), exam = fval('exam');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(exam)) { toast('日付を入れてください'); return false; }
-      const gcal = { url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
+      const gcal = {
+        url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked, color: fval('gcolor'),
+        read: [...$form.querySelectorAll('[name=rcal]:checked')].map(i => ({ id: i.value, name: i.dataset.name })),
+        hideLect: !!$form.elements.ghide.checked,
+      };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
       S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
       if (reconnect) {
@@ -1259,6 +1358,7 @@
         const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
       case 'slot': openSlot(+el.dataset.i, el.dataset.d); break;
+      case 'ext': openExt(el.dataset.k, +el.dataset.n); break;
       case 'openday': case 'dayjump': ui.day = el.dataset.d; ui.scrollNow = true; render(); break;
       case 'dayshift': ui.day = ymd(addDays(parse(ui.day), +el.dataset.v)); ui.scrollNow = true; render(); break;
       case 'daytoday': ui.day = ymd(today()); ui.scrollNow = true; render(); break;

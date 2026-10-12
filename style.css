@@ -190,6 +190,10 @@ body.dragging { -webkit-user-select: none; user-select: none; }
 .ev b { font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
 .ev span { color: color-mix(in srgb, var(--text) 72%, transparent); overflow-wrap: anywhere; }
 .ev.lecture, .ev.off { background: var(--surface-2); box-shadow: none; color: var(--faint); }
+.ev.ext { background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 6px 12px);
+  box-shadow: inset 3px 0 0 var(--faint); color: var(--muted); }
+.ev.ext b { font-weight: 600; color: var(--muted); }
+.ev.ext span { color: var(--faint); }
 .ev.lecture b, .ev.off b { font-weight: 500; color: var(--faint); }
 .ev.done { background: color-mix(in srgb, var(--c, var(--border)) 12%, var(--surface)); }
 .ev.done b, .ev.done span { color: var(--faint); text-decoration: line-through; text-decoration-thickness: 1px; }
@@ -415,6 +419,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 .steps a { color: var(--accent); }
 .warn { color: var(--now) !important; }
 .gsync { width: 100%; }
+.calpick { display: flex; flex-direction: column; gap: 0; max-height: 220px; overflow-y: auto; padding: 2px 0; }
 
 #toast { position: fixed; left: 50%; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 14px); transform: translate(-50%, 10px); background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 20; max-width: calc(100vw - 32px); }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
