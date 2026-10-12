@@ -5,7 +5,8 @@
  *    アプリ → カレンダーの一方向。カレンダー側で予定を動かしても、アプリには戻らない。
  * 2. アプリの記録（勉強時間・チェック・メモ・移動・計画の編集）を保管する。
  *    端末のデータが消えても、URLと合言葉を入れ直せば戻る。スマホとPCで記録を共有できる。
- * 3. 自分のカレンダー（共有されている大学のカレンダーなども）の予定を読んで、アプリに渡す（読むだけ）。
+ * 3. 自分のカレンダー（共有されている大学のカレンダーなども）の予定を読んで、アプリに渡す。
+ *    アプリからの「動かす・追加・名前変更・削除」も反映する（書き込みの権限があるカレンダーだけ）。
  *
  * 準備（最初の1回だけ）
  *  1. https://script.google.com で「新しいプロジェクト」を作り、このファイルの中身を全部貼り付けて保存
@@ -77,6 +78,10 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'save', updatedAt, data }           … 記録を保管（こちらの方が新しいときだけ）
 //  { token, op: 'cals' }                            … 読めるカレンダーの一覧
 //  { token, op: 'read', ids, from, to }             … 選んだカレンダーの予定を読む
+//  { token, op: 'xmove', cid, eid, start, newStart, newEnd }   … 予定を動かす（start は元の開始時刻）
+//  { token, op: 'xedit', cid, eid, start, title }              … 予定の名前を変える
+//  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
+//  { token, op: 'xadd',  cid, title, start, end, allDay }      … 予定を追加する
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
 //      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
@@ -123,10 +128,41 @@ function doPost(e) {
           end: (allDay ? ev.getAllDayEndDate() : ev.getEndTime()).getTime(),
           allDay: allDay,
           cal: c.getName(),
+          cid: id,
+          eid: ev.getId(),
+          rec: ev.isRecurringEvent(),
         });
       });
     });
     return out_({ ok: true, events: events });
+  }
+
+  if (/^x(move|edit|del|add)$/.test(req.op || '')) {
+    if (req.cid === cal.getId()) return out_({ ok: false, error: '診断士プランのカレンダーはアプリのコマで動かしてください' });
+    const c = CalendarApp.getCalendarById(req.cid);
+    if (!c) return out_({ ok: false, error: 'カレンダーが見つかりません' });
+    try {
+      if (req.op === 'xadd') {
+        const title = String(req.title || '').trim() || '予定';
+        const ev = req.allDay
+          ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end))
+          : c.createEvent(title, new Date(req.start), new Date(req.end));
+        return out_({ ok: true, eid: ev.getId() });
+      }
+      const ev = findEvent_(c, req.eid, Number(req.start));
+      if (!ev) return out_({ ok: false, error: '予定が見つかりません（Googleカレンダー側で変わったかもしれません）' });
+      if (req.op === 'xmove') {
+        if (ev.isAllDayEvent()) ev.setAllDayDates(new Date(req.newStart), new Date(req.newEnd));
+        else ev.setTime(new Date(req.newStart), new Date(req.newEnd));
+      } else if (req.op === 'xedit') {
+        ev.setTitle(String(req.title || '').trim() || '予定');
+      } else {
+        ev.deleteEvent();
+      }
+      return out_({ ok: true });
+    } catch (err) {
+      return out_({ ok: false, error: 'このカレンダーは書き換えられません（共有の権限を「予定の変更」にしてください）' });
+    }
   }
 
   const lock = LockService.getScriptLock();
@@ -161,6 +197,19 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// 予定を探す。くり返し予定は同じIDが並ぶので、開始時刻でその回を選ぶ
+function findEvent_(c, eid, start) {
+  const t = new Date(start);
+  const hits = c.getEvents(new Date(start - 60000), new Date(start + 60000)).filter(ev => {
+    if (ev.getId() !== eid) return false;
+    const s = (ev.isAllDayEvent() ? ev.getAllDayStartDate() : ev.getStartTime()).getTime();
+    return s === t.getTime();
+  });
+  if (hits.length) return hits[0];
+  const ev = c.getEventById(eid);
+  return ev && !ev.isRecurringEvent() ? ev : null;
 }
 
 function doGet() {

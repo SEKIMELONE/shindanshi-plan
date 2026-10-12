@@ -321,7 +321,7 @@
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
       <div class="cal-foot">
-        <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。</p>
+        <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。${extOn() ? '空いているところをタップで予定を追加。' : ''}</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
         ${gcalOn() ? `<p class="small faint gsync${S.gsync.err ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
@@ -707,6 +707,7 @@
     if (!c) return [];
     const out = [];
     c.events.forEach((e, n) => days.forEach((d, k) => {
+      if (e._gone) return;
       const d0 = atMin(d, 0), d1 = atMin(addDays(d, 1), 0);
       if (e.end <= d0 || e.start >= d1) return;
       if (e.allDay) { out.push({ ext: true, e, key, n, col: k, a: null, b: null }); return; }
@@ -721,19 +722,107 @@
 
   function extHtml(x, style, mode) {
     const e = x.e, when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
-    return `<button class="ev ext" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
+    const shown = ymd(addDays(parse(x.key), x.col));
+    const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
+    return `<button class="ev ext" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
       ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}</button>`;
+  }
+
+  // ---------- 自分のカレンダーの予定を書き換える（動かす・名前・削除・追加） ----------
+  const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  const toMin = str => { const [h, m] = String(str).split(':').map(Number); return h * 60 + m; };
+  const monday = d => addDays(d, -((d.getDay() + 6) % 7));
+
+  // 先に画面を変えてから送り、終わったら Google カレンダーから読み直して合わせる
+  async function extOps(ops, optimistic, okMsg) {
+    if (optimistic) { optimistic(); render(); }
+    try {
+      for (const body of ops) await gcalPost(body);
+      if (okMsg) toast(okMsg);
+    } catch (e) {
+      toast(`うまくいきませんでした：${e.message || e}`);
+    }
+    Object.values(extCache).forEach(c => { c.at = 0; });
+    if (!$dlg.open && !drag) render();
   }
 
   function openExt(key, n) {
     const e = ((extCache[key] || {}).events || [])[n];
     if (!e) return;
-    const s0 = new Date(e.start);
-    const when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
-    openDlg(`<h2>${esc(e.title)}</h2>
-      <p class="small muted">${mdw(s0)} · ${when}</p>
-      <p class="small faint">カレンダー「${esc(e.cal)}」の予定（アプリでは見るだけ。変えるときは Google カレンダーで）</p>
-      <div class="dlg-actions"><span class="spacer"></span><button class="btn" data-dlg="cancel" type="button">閉じる</button></div>`, () => {});
+    const s0 = new Date(e.start), canEdit = !!e.eid;
+    const sMin = s0.getHours() * 60 + s0.getMinutes(), len = Math.round((e.end - e.start) / 60000);
+    openDlg(`<h2>予定</h2>
+      <label class="field"><span>名前</span><input name="xt" value="${esc(e.title)}" ${canEdit ? '' : 'disabled'}></label>
+      <div class="row2">
+        <label class="field"><span>日付</span><input name="xd" type="date" value="${ymd(s0)}" ${canEdit ? '' : 'disabled'}></label>
+        <label class="field"><span>カレンダー</span><input value="${esc(e.cal)}" disabled></label>
+      </div>
+      ${e.allDay ? '<p class="small muted">終日の予定</p>' : `<div class="row2">
+        <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(sMin)}" ${canEdit ? '' : 'disabled'}></label>
+        <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(Math.min(24 * 60 - 1, sMin + len))}" ${canEdit ? '' : 'disabled'}></label></div>`}
+      ${e.rec ? '<p class="small faint">くり返しの予定です。変更・削除はこの回だけに反映されます。</p>' : ''}
+      ${canEdit ? '<p class="small faint">カレンダー上でドラッグしても動かせます。</p>' : '<p class="small warn">編集するには Apps Script を最新にしてください。</p>'}
+      <div class="dlg-actions">${canEdit ? '<button class="btn ghost danger" data-dlg="xdel" type="button">削除</button>' : ''}<span class="spacer"></span>
+        <button class="btn" data-dlg="cancel" type="button">閉じる</button>${canEdit ? '<button class="btn primary" type="submit">保存</button>' : ''}</div>`, act => {
+      if (act === 'xdel') {
+        if (!confirm(`「${e.title}」を Google カレンダーから削除します。`)) return false;
+        extOps([{ op: 'xdel', cid: e.cid, eid: e.eid, start: e.start }], () => { e._gone = true; }, '削除しました');
+        return;
+      }
+      if (act !== 'save' || !canEdit) return;
+      const title = fval('xt').trim() || e.title, d = parse(fval('xd'));
+      if (isNaN(d)) { toast('日付を入れてください'); return false; }
+      let ns, ne;
+      if (e.allDay) { ns = atMin(d, 0); ne = ns + (e.end - e.start); }
+      else {
+        const a = toMin(fval('xs')), b = toMin(fval('xe'));
+        if (!(b > a)) { toast('終了は開始より後にしてください'); return false; }
+        ns = atMin(d, a); ne = atMin(d, b);
+      }
+      const ops = [];
+      if (title !== e.title) ops.push({ op: 'xedit', cid: e.cid, eid: e.eid, start: e.start, title });
+      if (ns !== e.start || ne !== e.end) ops.push({ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne });
+      if (!ops.length) return;
+      extOps(ops, () => { e.title = title; e.start = ns; e.end = ne; }, '変更しました');
+    });
+  }
+
+  function openAdd(day, min, allDay) {
+    const cals = S.settings.gcal.read || [];
+    if (!cals.length) return;
+    const pick = cals.find(c => c.id === S.settings.gcal.addCal) || cals.find(c => !/祝日|holiday/i.test(c.name)) || cals[0];
+    const a = Math.max(0, Math.min(23 * 60, min)), b = Math.min(24 * 60 - 5, a + 60);
+    openDlg(`<h2>予定を追加</h2>
+      <label class="field"><span>名前</span><input name="xt" placeholder="例：塾バイト" autofocus></label>
+      <div class="row2">
+        <label class="field"><span>日付</span><input name="xd" type="date" value="${ymd(day)}"></label>
+        <label class="field"><span>カレンダー</span><select name="xc">${cals.map(c => `<option value="${esc(c.id)}" ${c.id === pick.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+      </div>
+      <label class="check-row"><input name="xa" type="checkbox" ${allDay ? 'checked' : ''}> 終日</label>
+      <div class="row2 xtimes" ${allDay ? 'hidden' : ''}>
+        <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(a)}"></label>
+        <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(b)}"></label>
+      </div>
+      ${actions(false)}`, act => {
+      if (act !== 'save') return;
+      const title = fval('xt').trim(), d = parse(fval('xd')), cid = fval('xc'), whole = $form.elements.xa.checked;
+      if (!title) { toast('名前を入れてください'); return false; }
+      if (isNaN(d)) { toast('日付を入れてください'); return false; }
+      let start, end;
+      if (whole) { start = atMin(d, 0); end = atMin(addDays(d, 1), 0); }
+      else {
+        const s1 = toMin(fval('xs')), e1 = toMin(fval('xe'));
+        if (!(e1 > s1)) { toast('終了は開始より後にしてください'); return false; }
+        start = atMin(d, s1); end = atMin(d, e1);
+      }
+      S.settings.gcal.addCal = cid; persist();
+      const cal = cals.find(c => c.id === cid);
+      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole }], () => {
+        const key = ymd(monday(d));
+        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid });
+      }, `「${title}」を追加しました`);
+    });
+    $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });
   }
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
@@ -845,6 +934,17 @@
     dragEndedAt = Date.now();
     drag = null;
     if (!commit || !target || !ui.calDays) return;
+    if (el.dataset.ext) {
+      const e = ((extCache[el.dataset.k] || {}).events || [])[+el.dataset.n];
+      if (!e) return;
+      const day = ui.calDays[target.col], from = parse(el.dataset.day);
+      const delta = atMin(day, target.a ?? 0) - atMin(from, el.dataset.a === '' ? 0 : +el.dataset.a);
+      if (!delta) return;
+      const ns = e.start + delta, ne = e.end + delta;
+      const when = e.allDay ? mdw(new Date(ns)) : `${mdw(new Date(ns))} ${msHm(ns)}`;
+      extOps([{ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne }], () => { e.start = ns; e.end = ne; }, `「${e.title}」を ${when} に動かしました`);
+      return;
+    }
     const key = el.dataset.d, i = +el.dataset.i, s = SLOTS[i];
     const day = ui.calDays[target.col], nk = ymd(day);
     const k = moveKey(key, i), before = S.moves[k];
@@ -1269,6 +1369,7 @@
         url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked, color: fval('gcolor'),
         read: [...$form.querySelectorAll('[name=rcal]:checked')].map(i => ({ id: i.value, name: i.dataset.name })),
         hideLect: !!$form.elements.ghide.checked,
+        addCal: st.gcal.addCal,
       };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
       S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
@@ -1397,7 +1498,15 @@
   $view.addEventListener('click', e => {
     if (Date.now() - dragEndedAt < 400) return;   // ドラッグを離したときのクリックは無視
     const el = e.target.closest('[data-action]');
-    if (el && $view.contains(el)) onAction(el);
+    if (el && $view.contains(el)) { onAction(el); return; }
+    const cell = e.target.closest('.cal-body .col, .cal-allday .ad');
+    if (cell && ui.tab === 'cal' && ui.calDays && extOn()) {
+      const day = ui.calDays[+cell.dataset.col];
+      if (!day) return;
+      if (cell.classList.contains('ad')) { openAdd(day, 9 * 60, true); return; }
+      const m = MIN_H * 60 + (e.clientY - cell.getBoundingClientRect().top) / hpx * 60;
+      openAdd(day, Math.floor(m / 30) * 30, false);
+    }
   });
   $view.addEventListener('keydown', e => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"][data-action]')) { e.preventDefault(); onAction(e.target); }
