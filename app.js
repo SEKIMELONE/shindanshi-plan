@@ -11,7 +11,7 @@
   // ---------- 保存データ ----------
   function blank() {
     return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9' } },
-      weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '' },
+      weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '', clast: 0, cerr: '' }, updatedAt: 0,
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
   function normalize(s) {
@@ -22,6 +22,7 @@
       v: 1,
       settings: { ...b.settings, ...(s.settings || {}), gcal: { ...b.settings.gcal, ...((s.settings || {}).gcal || {}) } },
       gsync: { ...b.gsync, ...(s.gsync || {}) },
+      updatedAt: Number(s.updatedAt) || 0,
       weeks: s.weeks || {},
       checks: s.checks || {},
       moves: s.moves || {},
@@ -32,9 +33,16 @@
     try { return normalize(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return blank(); }
   }
   let saveFailed = false;
-  function save() {
+  // この端末にだけ保存（送信状況など、記録の中身が変わらないとき）
+  function persist() {
     try { localStorage.setItem(KEY, JSON.stringify(S)); saveFailed = false; }
     catch (e) { if (!saveFailed) toast('この端末に保存できませんでした'); saveFailed = true; }
+  }
+  // 記録が変わったとき：変えた時刻を付けて保存し、ネット側（Apps Script）にも送る
+  function save() {
+    S.updatedAt = Date.now();
+    persist();
+    if (typeof cloudPushSoon === 'function') cloudPushSoon();
   }
   let S = load();
 
@@ -563,7 +571,7 @@
     gTimer = setTimeout(() => gcalFlush(false), 1500);
   }
   async function gcalFlush(force) {
-    if (!gcalOn()) return;
+    if (!gcalOn() || !cloudReady) return;
     if (gBusy) { gAgain = true; return; }
     if (!navigator.onLine) { S.gsync.err = 'オフライン（つながったら送ります）'; updateSyncNote(); return; }
     gBusy = true;
@@ -584,20 +592,76 @@
       S.gsync.err = String(e.message || e);
     }
     gBusy = false;
-    save(); updateSyncNote();
+    persist(); updateSyncNote();
     if (gAgain) { gAgain = false; gcalSchedule(); }
   }
   function syncNoteText() {
     const g = S.gsync;
+    if (g.cerr) return `記録の保管：うまくいっていません（${g.cerr}）`;
     if (g.err) return `Googleカレンダー：送れていません（${g.err}）`;
     if (!g.last) return 'Googleカレンダー：まだ送っていません';
     const t = new Date(g.last);
     return `Googleカレンダー：${diff(parse(ymd(t)), today()) === 0 ? '' : `${md(t)} `}${hm(t.getHours() * 60 + t.getMinutes())} に反映`;
   }
   function updateSyncNote() {
-    document.querySelectorAll('[data-gsync]').forEach(el => { el.textContent = syncNoteText(); el.classList.toggle('warn', !!S.gsync.err); });
+    document.querySelectorAll('[data-gsync]').forEach(el => { el.textContent = syncNoteText(); el.classList.toggle('warn', !!(S.gsync.err || S.gsync.cerr)); });
   }
-  addEventListener('online', () => gcalSchedule());
+
+  // ---------- 記録のネット保管（同じ Apps Script に保存。スマホとPCで共有、端末のデータが消えても戻せる） ----------
+  // 「最後に変えた時刻」が新しい方を正とする。合言葉と送信状況は端末ごとなので送らない
+  let cloudReady = !gcalOn(), cTimer = 0, cBusy = false, cAgain = false;
+  const cloudData = () => {
+    const { gsync, updatedAt, ...rest } = S;
+    return { ...rest, settings: { ...S.settings, gcal: undefined } };
+  };
+  function applyCloud(data, updatedAt) {
+    const keep = { gcal: S.settings.gcal, gsync: S.gsync };
+    S = normalize({ ...data, settings: { ...(data.settings || {}), gcal: keep.gcal }, gsync: keep.gsync, updatedAt });
+    persist(); render();
+  }
+  async function cloudLoad() {
+    if (!gcalOn()) { cloudReady = true; return; }
+    try {
+      const j = await gcalPost({ op: 'load' });
+      if (j.data && (j.updatedAt || 0) > (S.updatedAt || 0)) {
+        applyCloud(j.data, j.updatedAt);
+        toast('保管してある記録を読み込みました');
+      } else if (!j.data || (S.updatedAt || 0) > (j.updatedAt || 0)) {
+        if (!S.updatedAt) S.updatedAt = Date.now();
+        cloudReady = true; cloudPush();
+      }
+      cloudReady = true;
+      S.gsync.cerr = ''; S.gsync.clast = Date.now();
+    } catch (e) {
+      // 古いスクリプトのままだと読み込めない。カレンダーへの送信も止めておく（空の記録で上書きしないため）
+      S.gsync.cerr = `${e.message || e}。スクリプトを最新にしてください`;
+    }
+    persist(); updateSyncNote();
+    gcalSchedule();
+  }
+  function cloudPushSoon() {
+    if (!gcalOn() || !cloudReady) return;
+    clearTimeout(cTimer);
+    cTimer = setTimeout(cloudPush, 2000);
+  }
+  async function cloudPush() {
+    if (!gcalOn() || !cloudReady) return;
+    if (cBusy) { cAgain = true; return; }
+    if (!navigator.onLine) return;
+    cBusy = true;
+    try {
+      const j = await gcalPost({ op: 'save', updatedAt: S.updatedAt || Date.now(), data: cloudData() });
+      if (j.stale && j.data) { applyCloud(j.data, j.updatedAt); toast('ほかの端末の新しい記録に合わせました'); }
+      S.gsync.cerr = ''; S.gsync.clast = Date.now();
+    } catch (e) {
+      S.gsync.cerr = String(e.message || e);
+    }
+    cBusy = false;
+    persist(); updateSyncNote();
+    if (cAgain) { cAgain = false; cloudPushSoon(); }
+  }
+  addEventListener('online', () => { if (cloudReady) { cloudPush(); gcalSchedule(); } else cloudLoad(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && gcalOn()) cloudLoad(); });
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
   // マウスは押して動かすとすぐ、タッチは長押ししてから動かす（普通のスクロールと区別するため）
@@ -1034,7 +1098,7 @@
         <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
       ${actions(false)}
       <div class="settings-group"><h3>Googleカレンダー連携</h3>
-        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（今週・来週・表示中の週）。動かす・「終わった」にすると、カレンダー側も変わります。記録をつける端末1台だけで設定してください。</p>
+        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（今週・来週・表示中の週）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
         <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
         <label class="field"><span>予定の色（「終わった」はグレー）</span><select name="gcolor">${GCAL_COLORS.map(([v, n]) => `<option value="${v}" ${st.gcal.color === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -1082,8 +1146,11 @@
             .catch(e => toast(`つながりません：${e.message || e}`))
             .finally(() => { S.settings.gcal = prev; });
         } else {
-          save(); toast('反映しています…');
-          gcalFlush(true).then(() => toast(S.gsync.err ? `送れませんでした：${S.gsync.err}` : 'Googleカレンダーに反映しました'));
+          persist(); toast('反映しています…');
+          cloudLoad().then(() => gcalFlush(true)).then(() => {
+            const err = S.gsync.cerr || S.gsync.err;
+            toast(err ? `うまくいきませんでした：${err}` : 'Googleカレンダーに反映しました');
+          });
         }
         return false;
       }
@@ -1097,15 +1164,23 @@
         S.moves = {}; save(); render(); toast('元に戻しました'); return;
       }
       if (act === 'wipe') {
-        if (!confirm('勉強時間、チェック、メモ、編集、カレンダーの移動をすべて消します。元に戻せません。先に書き出しておくと安全です。')) return false;
-        S = blank(); save(); render(); toast('消しました'); return;
+        if (!confirm(`勉強時間、チェック、メモ、編集、カレンダーの移動をすべて消します。${gcalOn() ? 'Googleに保管している記録も消えます。' : ''}元に戻せません。先に書き出しておくと安全です。`)) return false;
+        const gcal = S.settings.gcal;
+        S = blank(); S.settings.gcal = gcal; save(); render(); toast('消しました'); return;
       }
       const start = fval('start'), exam = fval('exam');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(exam)) { toast('日付を入れてください'); return false; }
       const gcal = { url: fval('gurl').trim(), token: fval('gtoken').trim(), lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
-      if (gcal.url !== st.gcal.url || gcal.token !== st.gcal.token) S.gsync = { hash: {}, last: 0, err: '' };   // つなぎ先が変わったら全部送り直す   // 設定が変わったら全部送り直す
+      const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
       S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
-      save(); render();
+      if (reconnect) {
+        // つなぎ先が変わったら、まず保管してある記録を読み込む（空の記録で上書きしないため）。カレンダーは全部送り直す
+        S.gsync = { hash: {}, last: 0, err: '', clast: 0, cerr: '' };
+        cloudReady = false;
+        persist(); render(); cloudLoad();
+      } else {
+        save(); render();
+      }
       toast(parse(start).getDay() === 1 ? '保存しました' : '保存しました（開始日が月曜ではありません）');
     });
     const $s = $form.elements.start, $h = $form.querySelector('#start-hint');
@@ -1255,6 +1330,7 @@
   addEventListener('storage', e => { if (e.key === KEY && !drag) { S = load(); render(); } });
 
   render();
+  if (gcalOn()) cloudLoad();
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

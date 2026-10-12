@@ -1,8 +1,10 @@
 /**
  * 診断士プラン → Googleカレンダー 連携用スクリプト（Google Apps Script）
  *
- * アプリから送られてきた1週間分のコマを、専用カレンダー「診断士プラン」に反映する。
- * アプリ → カレンダーの一方向。カレンダー側で予定を動かしても、アプリには戻らない。
+ * 1. アプリから送られてきた1週間分のコマを、専用カレンダー「診断士プラン」に反映する。
+ *    アプリ → カレンダーの一方向。カレンダー側で予定を動かしても、アプリには戻らない。
+ * 2. アプリの記録（勉強時間・チェック・メモ・移動・計画の編集）を保管する。
+ *    端末のデータが消えても、URLと合言葉を入れ直せば戻る。スマホとPCで記録を共有できる。
  *
  * 準備（最初の1回だけ）
  *  1. https://script.google.com で「新しいプロジェクト」を作り、このファイルの中身を全部貼り付けて保存
@@ -43,16 +45,60 @@ function getCalendar_() {
   return cal;
 }
 
-// アプリからの送信：{ token, ping } または { token, from, to, events: [{ id, title, start, end, desc, color }] }
-// from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
+// ---------- 記録の保管 ----------
+// スクリプト プロパティに、JSON を小分けにして入れる（1つの値は 9KB まで、全体で 500KB まで）
+const CHUNK = 2500;   // 日本語は1文字3バイトなので、2500文字ずつ
+
+function loadState_() {
+  const props = PropertiesService.getScriptProperties();
+  const n = Number(props.getProperty('STATE_N') || 0);
+  if (!n) return { updatedAt: 0, data: null };
+  let str = '';
+  for (let i = 0; i < n; i++) str += props.getProperty('STATE_' + i) || '';
+  try { return JSON.parse(str); } catch (err) { return { updatedAt: 0, data: null }; }
+}
+
+function saveState_(updatedAt, data) {
+  const props = PropertiesService.getScriptProperties();
+  const str = JSON.stringify({ updatedAt: updatedAt, data: data });
+  const oldN = Number(props.getProperty('STATE_N') || 0);
+  const parts = {};
+  let n = 0;
+  for (let i = 0; i < str.length; i += CHUNK) parts['STATE_' + n++] = str.slice(i, i + CHUNK);
+  parts.STATE_N = String(n);
+  props.setProperties(parts);
+  for (let i = n; i < oldN; i++) props.deleteProperty('STATE_' + i);
+}
+
+// アプリからの送信
+//  { token, ping }                                  … 接続テスト
+//  { token, op: 'load' }                            … 保管している記録を返す
+//  { token, op: 'save', updatedAt, data }           … 記録を保管（こちらの方が新しいときだけ）
+//  { token, from, to, events: [{ id, title, start, end, desc, color }] }
+//      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: '送信内容が読めません' }); }
   const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
   if (!req || !token || req.token !== token) return out_({ ok: false, error: '合言葉が違います' });
 
+  if (req.op === 'load') return out_(Object.assign({ ok: true }, loadState_()));
+  if (req.op === 'save') {
+    const lk = LockService.getScriptLock();
+    lk.waitLock(25000);
+    try {
+      const cur = loadState_();
+      // ほかの端末がもっと新しい記録を保管していたら、上書きせずにそちらを返す
+      if (cur.data && Number(req.updatedAt) < Number(cur.updatedAt)) return out_(Object.assign({ ok: true, stale: true }, cur));
+      saveState_(Number(req.updatedAt), req.data);
+      return out_({ ok: true, updatedAt: Number(req.updatedAt) });
+    } finally {
+      lk.releaseLock();
+    }
+  }
+
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName() });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 2 });
 
   const lock = LockService.getScriptLock();
   lock.waitLock(25000);
