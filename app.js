@@ -316,7 +316,14 @@
       </div>
       ${banners}
       <div class="cal" style="--hpx:${HOUR_PX}px">
-        <div class="cal-row cal-head"><div class="gutter"></div>${head}</div>
+        <div class="cal-sticky">
+          <div class="cal-weekbar">
+            <button class="navbtn" data-action="calweek" data-v="-1" ${w <= 1 ? 'disabled' : ''} aria-label="前の週">‹</button>
+            <span class="num">${md(days[0])}〜${md(days[6])}<small>　第${w}週</small></span>
+            <button class="navbtn" data-action="calweek" data-v="1" ${w >= N ? 'disabled' : ''} aria-label="次の週">›</button>
+          </div>
+          <div class="cal-row cal-head"><div class="gutter"></div>${head}</div>
+        </div>
         <div class="cal-row cal-allday"><div class="gutter">終日</div>${allday}</div>
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
@@ -846,6 +853,27 @@
     });
     $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });
   }
+
+  // ---------- 左右のスワイプで週・日を切り替える（Googleカレンダーと同じ） ----------
+  let swipe = null;
+  $view.addEventListener('touchstart', e => {
+    if (ui.tab !== 'cal' || e.touches.length !== 1 || !e.target.closest('.cal, .dayview')) { swipe = null; return; }
+    const t = e.touches[0];
+    swipe = { x: t.clientX, y: t.clientY, at: Date.now() };
+  }, { passive: true });
+  $view.addEventListener('touchend', e => {
+    if (!swipe || (drag && drag.active) || $dlg.open) { swipe = null; return; }
+    const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+    const quick = Date.now() - swipe.at < 700;
+    swipe = null;
+    if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;   // 縦のスクロールは無視
+    const v = dx < 0 ? 1 : -1;   // 左へスワイプ → 次
+    if (ui.day) { ui.day = ymd(addDays(parse(ui.day), v)); render(); return; }
+    const w = weekOf(ui.calDays ? ui.calDays[0] : today());
+    if ((v < 0 && w <= 1) || (v > 0 && w >= N)) return;
+    ui.calOffset += v; render();
+    toast(v > 0 ? '次の週' : '前の週');
+  }, { passive: true });
 
   // ---------- ドラッグで移動（同じ週の中だけ） ----------
   // マウスは押して動かすとすぐ、タッチは長押ししてから動かす（普通のスクロールと区別するため）
