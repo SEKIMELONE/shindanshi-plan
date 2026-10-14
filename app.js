@@ -692,8 +692,9 @@
       .then(j => {
         const before = c && c.sel === sel ? JSON.stringify(c.events) : '';
         extCache[key] = { at: Date.now(), sel, events: j.events || [] };
-        const keys = Object.keys(extCache).sort();
-        while (keys.length > 6) delete extCache[keys.shift()];
+        // 取っておくのは6週分まで。読んだのが古い週から捨てる（今読んだ週は捨てない）
+        const old = Object.keys(extCache).filter(k => k !== key).sort((p, q) => extCache[p].at - extCache[q].at);
+        while (old.length > 5) delete extCache[old.shift()];
         try { localStorage.setItem(EXT_KEY, JSON.stringify(extCache)); } catch (e) { /* 入らなければ取っておかないだけ */ }
         if (before !== JSON.stringify(extCache[key].events) && !drag && !$dlg.open) render();
       })
