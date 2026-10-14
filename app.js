@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true } },
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true, span: 'sem' } },
       weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '', clast: 0, cerr: '' }, updatedAt: 0,
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
@@ -575,24 +575,40 @@
     clearTimeout(gTimer);
     gTimer = setTimeout(() => gcalFlush(false), 1500);
   }
+  // 反映する期間。2セメ（後期）は学年暦で授業が 2/3（水）まで → その週（月〜日）の終わりまで
+  const SEM_END = '2027-02-03';
+  const GCAL_SPANS = [['near', '今週と来週だけ'], ['sem', '2セメの終わりまで（2/7）'], ['all', '計画の最後まで（試験まで）']];
+  const PER_RUN = 3;                     // 1回に送るのは3週まで（Google の作成回数の制限を避ける）
+  let gMore = 0, gLeft = 0;
+
+  function gcalWeeks() {
+    const cur = weekOf(today()), span = S.settings.gcal.span || 'sem';
+    const end = span === 'all' ? N : span === 'near' ? Math.min(N, cur + 1) : Math.max(Math.min(N, cur + 1), weekOf(parse(SEM_END)));
+    const ws = [];
+    if (ui.tab === 'cal' && ui.calDays) ws.push(weekOf(ui.calDays[0]));   // 見ている週を先に
+    for (let w = cur; w <= end; w++) if (!ws.includes(w)) ws.push(w);
+    return ws;
+  }
+
   async function gcalFlush(force) {
     if (!gcalOn() || !cloudReady) return;
     if (gBusy) { gAgain = true; return; }
     if (!navigator.onLine) { S.gsync.err = 'オフライン（つながったら送ります）'; updateSyncNote(); return; }
     gBusy = true;
-    const cur = weekOf(today());
-    const weeks = new Set([cur, Math.min(N, cur + 1)]);
-    if (ui.tab === 'cal' && ui.calDays) weeks.add(weekOf(ui.calDays[0]));
+    clearTimeout(gMore);
+    if (force) S.gsync.hash = {};
     let sent = 0;
     try {
-      for (const w of weeks) {
-        const body = gcalPayload(w), h = hashStr(JSON.stringify(body));
-        if (!force && S.gsync.hash[w] === h) continue;
-        await gcalPost(body);
-        S.gsync.hash[w] = h; sent++;
+      const todo = gcalWeeks().map(w => { const body = gcalPayload(w); return { w, body, h: hashStr(JSON.stringify(body)) }; })
+        .filter(x => S.gsync.hash[x.w] !== x.h);
+      for (const x of todo.slice(0, PER_RUN)) {
+        await gcalPost(x.body);
+        S.gsync.hash[x.w] = x.h; sent++;
       }
+      gLeft = Math.max(0, todo.length - sent);
       S.gsync.err = '';
       if (sent || force) S.gsync.last = Date.now();
+      if (gLeft) gMore = setTimeout(() => gcalFlush(false), 20000);   // 残りは少し間をあけて送る
     } catch (e) {
       S.gsync.err = String(e.message || e);
     }
@@ -605,6 +621,7 @@
     if (g.xerr) return `カレンダーの予定：読めていません（${g.xerr}）`;
     if (g.cerr) return `記録の保管：うまくいっていません（${g.cerr}）`;
     if (g.err) return `Googleカレンダー：送れていません（${g.err}）`;
+    if (gLeft) return `Googleカレンダー：反映しています（あと${gLeft}週）`;
     if (!g.last) return 'Googleカレンダー：まだ送っていません';
     const t = new Date(g.last);
     return `Googleカレンダー：${diff(parse(ymd(t)), today()) === 0 ? '' : `${md(t)} `}${hm(t.getHours() * 60 + t.getMinutes())} に反映`;
@@ -1276,9 +1293,10 @@
         <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
       ${actions(false)}
       <div class="settings-group"><h3>Googleカレンダー連携</h3>
-        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（今週・来週・表示中の週）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
+        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（下の「反映する期間」の分。最初はまとめて送らず、20秒おきに3週ずつ送ります）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
         <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
+        <label class="field"><span>反映する期間</span><select name="gspan">${GCAL_SPANS.map(([v, n]) => `<option value="${v}" ${(st.gcal.span || 'sem') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="field"><span>予定の色（「終わった」はグレー）</span><select name="gcolor">${GCAL_COLORS.map(([v, n]) => `<option value="${v}" ${st.gcal.color === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="check-row"><input name="glect" type="checkbox" ${st.gcal.lectures ? 'checked' : ''}> 講義も入れる</label>
         <div class="field"><span>アプリに表示する自分のカレンダー（読むだけ）</span>
@@ -1339,7 +1357,7 @@
         const url = fval('gurl').trim(), token = fval('gtoken').trim();
         if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url) || !token) { toast('URL（https://script.google.com/…）と合言葉を入れてください'); return false; }
         const prev = S.settings.gcal;
-        S.settings.gcal = { ...prev, url, token, lectures: !!$form.elements.glect.checked, color: fval('gcolor') };
+        S.settings.gcal = { ...prev, url, token, lectures: !!$form.elements.glect.checked, color: fval('gcolor'), span: fval('gspan') || 'sem' };
         if (act === 'gtest') {
           gcalPost({ ping: true })
             .then(j => toast(`つながりました（カレンダー「${j.calendar}」）`))
@@ -1375,6 +1393,7 @@
         read: [...$form.querySelectorAll('[name=rcal]:checked')].map(i => ({ id: i.value, name: i.dataset.name })),
         hideLect: !!$form.elements.ghide.checked,
         addCal: st.gcal.addCal,
+        span: fval('gspan') || 'sem',
       };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
       S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
