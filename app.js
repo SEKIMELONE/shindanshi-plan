@@ -323,7 +323,7 @@
       <div class="cal-foot">
         <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。${extOn() ? '空いているところをタップで予定を追加。' : ''}</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
-        ${gcalOn() ? `<p class="small faint gsync${S.gsync.err ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
+        ${gcalOn() ? `<p class="small faint gsync${S.gsync.err || S.gsync.cerr || S.gsync.xerr ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
       <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
@@ -602,6 +602,7 @@
   }
   function syncNoteText() {
     const g = S.gsync;
+    if (g.xerr) return `カレンダーの予定：読めていません（${g.xerr}）`;
     if (g.cerr) return `記録の保管：うまくいっていません（${g.cerr}）`;
     if (g.err) return `Googleカレンダー：送れていません（${g.err}）`;
     if (!g.last) return 'Googleカレンダー：まだ送っていません';
@@ -609,7 +610,7 @@
     return `Googleカレンダー：${diff(parse(ymd(t)), today()) === 0 ? '' : `${md(t)} `}${hm(t.getHours() * 60 + t.getMinutes())} に反映`;
   }
   function updateSyncNote() {
-    document.querySelectorAll('[data-gsync]').forEach(el => { el.textContent = syncNoteText(); el.classList.toggle('warn', !!(S.gsync.err || S.gsync.cerr)); });
+    document.querySelectorAll('[data-gsync]').forEach(el => { el.textContent = syncNoteText(); el.classList.toggle('warn', !!(S.gsync.err || S.gsync.cerr || S.gsync.xerr)); });
   }
 
   // ---------- 記録のネット保管（同じ Apps Script に保存。スマホとPCで共有、端末のデータが消えても戻せる） ----------
@@ -681,7 +682,7 @@
   const msHm = ms => { const d = new Date(ms); return hm(d.getHours() * 60 + d.getMinutes()); };
 
   function extEnsure(days) {
-    if (!extOn() || !cloudReady) return;
+    if (!extOn()) return;   // 読むだけなので、記録の読み込みを待たなくてよい
     const key = ymd(days[0]), c = extCache[key];
     const sel = S.settings.gcal.read.map(x => x.id).join(',');
     if (c && c.sel === sel && Date.now() - c.at < 5 * 60000) return;
@@ -696,7 +697,10 @@
         try { localStorage.setItem(EXT_KEY, JSON.stringify(extCache)); } catch (e) { /* 入らなければ取っておかないだけ */ }
         if (before !== JSON.stringify(extCache[key].events) && !drag && !$dlg.open) render();
       })
-      .catch(() => { /* 読めないときは前回の分を出しておく */ })
+      .then(() => { if (S.gsync.xerr) { S.gsync.xerr = ''; persist(); updateSyncNote(); } })
+      .catch(e => {   // 読めないときは前回の分を出しておき、理由を表示する
+        S.gsync.xerr = String(e.message || e); persist(); updateSyncNote();
+      })
       .finally(() => extBusy.delete(key));
   }
 
