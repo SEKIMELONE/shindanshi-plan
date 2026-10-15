@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true, span: 'sem' } },
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', pomo: true, gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true, span: 'sem' } },
       weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '', clast: 0, cerr: '' }, updatedAt: 0,
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
@@ -115,9 +115,12 @@
   // ---------- 勉強時間 ----------
   const wk = w => S.weeks[w] || {};
   const setWk = (w, patch) => { S.weeks[w] = { ...wk(w), ...patch }; };
+  // 記録のキー：時間割の行 "3"、25分に分けたコマ "3.0"〜"3.2"、追加のコマ "p0"…
+  const POMO = 25, BREAK = 5;
+  const unitHours = id => (/^p|\./.test(id) ? POMO / 60 : (SLOTS[+id] ? SLOTS[+id].hours : 0));
   function dayHours(key) {
     const c = S.checks[key]; let h = 0;
-    if (c) for (const i in c) if (c[i] && SLOTS[i]) h += SLOTS[i].hours;
+    if (c) for (const id in c) if (c[id]) h += unitHours(id);
     return h;
   }
   function checkedHours(w) {
@@ -128,7 +131,8 @@
   const actual = w => Math.max(0, checkedHours(w) + (wk(w).adj || 0));
   const hasRecord = w => actual(w) > 0 || !!wk(w).done;
   const sumTo = (f, w) => { let s = 0; for (let i = 1; i <= w; i++) s += f(i); return s; };
-  const fmtH = h => { const r = Math.round(h * 4) / 4; return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/0$/, ''); };
+  const fmtH = h => { const r = Math.round(h * 100) / 100; return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/0$/, ''); };
+  const fmtGain = h => (h < 1 ? `${Math.round(h * 60)}分` : `${fmtH(h)}h`);   // 「終わった（＋25分）」など
   const pct = (a, b) => (b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0);
 
   // ---------- 画面の状態 ----------
@@ -169,17 +173,67 @@
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
-  // 移動したコマ。キーは「元の日付|時間割の行」。同じ週の中でしか動かせない
-  const moveKey = (key, i) => `${key}|${i}`;
-  function getMove(key, i) {
-    const m = S.moves[moveKey(key, i)];
+  // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
+  const pomoOn = () => S.settings.pomo !== false;
+  const pomoCount = s => Math.max(1, Math.floor((s.b - s.a + BREAK) / (POMO + BREAK)));   // 90分→3、70分→2
+  const EXTRA_TEXT = '財務・会計：休憩で減った分の演習（すきま時間に置く）';
+
+  // ある日の元の位置のコマ（ユニット）。勉強の時間つきのコマだけ25分に分ける
+  function baseUnits(d) {
+    const pi = patIdx(pattern(weekOf(d))), dc = DAYS[d.getDay()], out = [];
+    SLOTS.forEach(s => {
+      if (s.day !== '毎日' && s.day !== dc) return;
+      const text = ttCell(s.i, pi);
+      if (!text) return;
+      if (pomoOn() && s.a != null && parseTask(text).type === 'study') {
+        const n = pomoCount(s);
+        for (let k = 0; k < n; k++) out.push({ uid: `${s.i}.${k}`, s, k, n, a0: s.a + k * (POMO + BREAK), dur: POMO, hours: POMO / 60 });
+      } else {
+        out.push({ uid: String(s.i), s, a0: s.a, dur: s.a == null ? null : s.b - s.a, hours: s.hours });
+      }
+    });
+    return out;
+  }
+  // 休憩で減った分を、財務・会計の25分コマとして週に足す（時間は決めず「終日」の段に置く）
+  const extraCache = {};
+  function weekExtras(w) {
+    const ck = `${w}|${pomoOn()}|${JSON.stringify(S.ov.tt)}|${pattern(w)}`;
+    if (extraCache[w] && extraCache[w].ck === ck) return extraCache[w].list;
+    let lost = 0;
+    const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
+    if (pomoOn()) days.forEach(d => baseUnits(d).forEach(u => { if (u.k === 0) lost += (u.s.b - u.s.a) - u.n * POMO; }));
+    const n = Math.round(lost / POMO), list = [];
+    for (let j = 0; j < n; j++) {
+      const d = days[j % 7];
+      list.push({ date: ymd(d), u: { uid: `p${j}`, extra: true, flex: true, text: EXTRA_TEXT, a0: null, dur: POMO, hours: POMO / 60,
+        s: { i: `p${j}`, day: DAYS[d.getDay()], period: '追加', time: '25分', a: null, b: null, hours: POMO / 60 } } });
+    }
+    extraCache[w] = { ck, list };
+    return list;
+  }
+  const unitsOf = d => baseUnits(d).concat(weekExtras(weekOf(d)).filter(x => x.date === ymd(d)).map(x => x.u));
+  const findUnit = (key, uid) => unitsOf(parse(key)).find(u => u.uid === String(uid));
+
+  // 移動したコマ。キーは「元の日付|コマ」。同じ週の中でしか動かせない
+  const moveKey = (key, uid) => `${key}|${uid}`;
+  function getMove(key, u) {
+    let m = S.moves[moveKey(key, u.uid)];
+    // 25分に分ける前に90分のコマごと動かしていたら、3つとも同じだけずらす
+    if (!m && u.k != null) {
+      const old = S.moves[moveKey(key, u.s.i)];
+      if (old) m = { d: old.d, a: old.a == null ? null : old.a + u.k * (POMO + BREAK) };
+    }
     return m && rawWeek(parse(m.d)) === rawWeek(parse(key)) ? m : null;
+  }
+  function isDone(key, u) {
+    const c = S.checks[key] || {};
+    return !!(c[u.uid] || (u.k != null && c[u.s.i]));   // 分ける前に90分ごと「終わった」にしたもの
   }
 
   // ある日の1コマを表示用にまとめる（date は元の日付）
-  function slotInfo(s, date) {
-    const w = weekOf(date);
-    const text = ttCell(s.i, patIdx(pattern(w)));
+  function slotInfo(u, date) {
+    const s = u.s, w = weekOf(date);
+    const text = u.text || ttCell(s.i, patIdx(pattern(w)));
     if (!text) return null;
     const p = parseTask(text);
     const idxs = p.type === 'study' ? subjectsFor(p.subj, w) : [];
@@ -188,21 +242,23 @@
     const task = p.type === 'study' && !p.task.startsWith(subjName) ? p.task : '';
     const c = p.type === 'study' ? (idxs.length ? color(SUBJ[idxs[0]]) : color(OTHER)) : '';
     const key = ymd(date);
-    const mv = getMove(key, s.i);
-    const a = s.a == null ? null : (mv && mv.a != null ? mv.a : s.a);
+    const mv = getMove(key, u);
+    const a = u.flex ? (mv && mv.a != null ? mv.a : null) : (u.a0 == null ? null : (mv && mv.a != null ? mv.a : u.a0));
+    const mark = u.extra ? '（追加）' : u.k != null ? '①②③④'[u.k] : '';
     return {
-      s, w, date, key, text, p, idxs, subjName, short, task, c,
-      done: !!(S.checks[key] || {})[s.i],
-      shown: mv ? parse(mv.d) : date, a, b: a == null ? null : a + (s.b - s.a), moved: !!mv,
+      s, u, uid: u.uid, w, date, key, text, p, idxs, subjName, short: short + mark, task, c, flex: !!u.flex,
+      // 分ける前に90分ごと記録したものは、実際にやった90分のまま数える（3つで1.5h）
+      hours: u.k != null && !(S.checks[key] || {})[u.uid] && (S.checks[key] || {})[s.i] ? s.hours / u.n : u.hours,
+      done: isDone(key, u),
+      shown: mv ? parse(mv.d) : date, a, b: a == null ? null : a + u.dur, moved: !!mv,
     };
   }
 
   // 1週間ぶんのコマ（移動後の位置で）
   function weekEvents(days) {
     const evs = [];
-    days.forEach(d => SLOTS.forEach(s => {
-      if (s.day !== '毎日' && s.day !== DAYS[d.getDay()]) return;
-      const x = slotInfo(s, d);
+    days.forEach(d => unitsOf(d).forEach(u => {
+      const x = slotInfo(u, d);
       if (x) { x.col = diff(days[0], x.shown); evs.push(x); }
     }));
     return evs;
@@ -244,8 +300,8 @@
       const tk = evTask(x), rng = x.p.type === 'study' ? evRange(x) : '';
       inner = `${x.a == null ? '' : `<i class="tm num">${hm(x.a)}〜${hm(x.b)}</i>`}<b>${esc(evName(x))}</b>${tk ? `<span>${esc(tk)}</span>` : ''}${rng ? `<small>${esc(rng)}</small>` : ''}`;
     }
-    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-i="${x.s.i}" data-d="${x.key}"
-      ${movable ? `data-movable="1" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : ''} aria-label="${esc(label)}">${inner}</button>`;
+    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-u="${x.uid}" data-d="${x.key}"
+      ${movable ? `data-movable="1" data-dur="${x.flex ? POMO : x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"${x.flex ? ' data-flex="1"' : ''}` : ''} aria-label="${esc(label)}">${inner}</button>`;
   }
 
   function renderCal() {
@@ -271,7 +327,7 @@
     const evs = weekEvents(days).filter(showEv);
     const exts = extEvents(days);
     extEnsure(days);
-    const dayH = days.map((_, k) => evs.filter(x => x.col === k && x.done).reduce((h, x) => h + x.s.hours, 0));
+    const dayH = days.map((_, k) => evs.filter(x => x.col === k && x.done).reduce((h, x) => h + x.hours, 0));
 
     const head = days.map((d, k) =>
       `<button class="dh${k === todayCol ? ' today' : ''}" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の予定を開く"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></button>`).join('');
@@ -336,10 +392,15 @@
       <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
   }
 
-  function toggleCheck(key, i) {
+  function toggleCheck(key, uid) {
     const c = S.checks[key] || (S.checks[key] = {});
-    if (c[i]) delete c[i]; else c[i] = 1;
-    const on = !!c[i];
+    const m = /^(\d+)\.\d+$/.exec(uid);
+    if (m && c[m[1]]) {   // 分ける前に90分ごと記録していたら、25分のコマ単位に置き直してから付け外す
+      delete c[m[1]];
+      for (let k = 0; k < pomoCount(SLOTS[+m[1]]); k++) c[`${m[1]}.${k}`] = 1;
+    }
+    if (c[uid]) delete c[uid]; else c[uid] = 1;
+    const on = !!c[uid];
     if (!Object.keys(c).length) delete S.checks[key];
     // 手入力でマイナスしていた分が、チェックを外したあとに残らないようにする
     const w = weekOf(parse(key)), ch = checkedHours(w);
@@ -349,29 +410,34 @@
     return on;
   }
 
-  function openSlot(i, key) {
-    const x = slotInfo(SLOTS[i], parse(key));
+  function openSlot(uid, key) {
+    const u = findUnit(key, uid);
+    const x = u && slotInfo(u, parse(key));
     if (!x) return;
     const s = x.s, study = x.p.type === 'study';
     const rng = x.idxs.map(j => [j, range(x.w, j)]).filter(([, r]) => r);
     const title = x.p.type === 'lecture' ? x.p.task : (x.subjName || x.p.task);
-    const when = x.a == null ? (s.day === '毎日' ? '毎日' : esc(s.time)) : `${hm(x.a)}〜${hm(x.b)}`;
-    const orig = `${mdw(x.date)} ${s.day === '毎日' ? '' : esc(s.period)}${s.a == null ? '' : `（${hm(s.a)}〜${hm(s.b)}）`}`;
+    const when = x.a == null ? (s.day === '毎日' ? '毎日' : x.flex ? '時間未定（25分）' : esc(s.time)) : `${hm(x.a)}〜${hm(x.b)}`;
+    const orig = x.flex ? `${mdw(x.date)}（時間未定）` : `${mdw(x.date)} ${s.day === '毎日' ? '' : esc(s.period)}${u.a0 == null ? '' : `（${hm(u.a0)}〜${hm(u.a0 + u.dur)}）`}`;
     openDlg(`<h2>${esc(title)}</h2>
       <p class="small muted">${mdw(x.shown)} · ${when}${x.done ? ' · <span class="pill good">✓ 完了</span>' : ''}</p>
       ${x.moved ? `<p class="small faint">移動済み。元は ${orig}</p>` : ''}
-      <p>${x.p.type === 'lecture' ? '<span class="muted">講義（参考として表示）</span>' : esc(x.text)}</p>
+      <p>${x.p.type === 'lecture' ? '<span class="muted">講義（参考として表示）</span>' : esc(x.text)}${u.k != null ? `<br><span class="small faint">90分のコマの ${u.k + 1}/${u.n} つ目（25分。終わったら5分休憩）</span>` : ''}${x.flex && x.a == null ? '<br><span class="small faint">空いている時間にドラッグして置いてください</span>' : ''}</p>
       ${rng.length ? `<div class="field"><span>この週の範囲</span>${rng.map(([j, r]) => `<div class="rg"><span class="dot" style="background:${color(SUBJ[j])}"></span><span>${rng.length > 1 ? `<b>${esc(SUBJ[j])}</b>　` : ''}${esc(r)}</span></div>`).join('')}</div>` : ''}
       <div class="dlg-actions">
         ${x.moved ? '<button class="btn ghost" data-dlg="unmove" type="button">元の時間に戻す</button>' : ''}<span class="spacer"></span>
         <button class="btn" data-dlg="cancel" type="button">閉じる</button>
-        ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}`}</button>` : ''}
+        ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${x.hours ? `（＋${fmtGain(x.hours)}）` : ''}`}</button>` : ''}
       </div>`, act => {
-      if (act === 'unmove') { delete S.moves[moveKey(key, i)]; save(); render(); toast('元の時間に戻しました'); return; }
+      if (act === 'unmove') {
+        delete S.moves[moveKey(key, uid)];
+        if (u.k != null) delete S.moves[moveKey(key, s.i)];   // 分ける前の動かし方も消す
+        save(); render(); toast('元の時間に戻しました'); return;
+      }
       if (act !== 'toggle') return;
-      const on = toggleCheck(key, i);
+      const on = toggleCheck(key, uid);
       render();
-      toast(on ? `記録しました${s.hours ? `（＋${fmtH(s.hours)}h）` : ''}` : '未完了に戻しました');
+      toast(on ? `記録しました${x.hours ? `（＋${fmtGain(x.hours)}）` : ''}` : '未完了に戻しました');
     });
   }
 
@@ -404,12 +470,12 @@
     extEnsure(days);
     const timed = evs.filter(x => x.a != null), allday = evs.filter(x => x.a == null);
     const study = evs.filter(x => x.p.type === 'study');
-    const planH = study.reduce((h, x) => h + x.s.hours, 0);
-    const doneH = study.filter(x => x.done).reduce((h, x) => h + x.s.hours, 0);
+    const planH = study.reduce((h, x) => h + x.hours, 0);
+    const doneH = study.filter(x => x.done).reduce((h, x) => h + x.hours, 0);
     const doneN = study.filter(x => x.done).length;
 
     const strip = days.map((x, k) => {
-      const h = all.filter(e => e.col === k && e.done).reduce((n, e) => n + e.s.hours, 0);
+      const h = all.filter(e => e.col === k && e.done).reduce((n, e) => n + e.hours, 0);
       return `<button class="ds${k === col ? ' sel' : ''}${diff(t, x) === 0 ? ' today' : ''}" data-action="dayjump" data-d="${ymd(x)}" aria-label="${mdw(x)}"${k === col ? ' aria-current="date"' : ''}>
         <span>${DAYS[x.getDay()]}</span><b class="num">${x.getDate()}</b><i>${h > 0 ? '●' : ''}</i></button>`;
     }).join('');
@@ -438,13 +504,13 @@
           <div class="pk">前のコマ</div>
           <div class="pn"><span class="dot" style="background:${prev.c}"></span><span>${esc(evName(prev))}</span><span class="faint num">${hm(prev.a)}〜${hm(prev.b)}</span></div>
           ${prev.done ? '<div class="pill good">✓ 記録済み</div>'
-            : `<button class="btn primary small" data-action="quickdone" data-i="${prev.s.i}" data-d="${prev.key}">終わった（＋${fmtH(prev.s.hours)}h）</button>`}
+            : `<button class="btn primary small" data-action="quickdone" data-u="${prev.uid}" data-d="${prev.key}">終わった（＋${fmtGain(prev.hours)}）</button>`}
         </div>`;
       if (cur) {
         const s0 = atMin(d, cur.a), e0 = atMin(d, cur.b);
         const btn = cur.p.type !== 'study' ? ''
           : cur.done ? '<div class="pill good">✓ 終わった</div>'
-            : `<button class="btn primary small" data-action="quickdone" data-i="${cur.s.i}" data-d="${cur.key}">終わった（＋${fmtH(cur.s.hours)}h）</button>`;
+            : `<button class="btn primary small" data-action="quickdone" data-u="${cur.uid}" data-d="${cur.key}">終わった（＋${fmtGain(cur.hours)}）</button>`;
         nowCard = `<div class="card side now-card" style="--c:${cur.c || 'var(--faint)'}">
           <div class="k"><span><span class="live"></span>${cur.p.type === 'lecture' ? '講義中' : 'いまのコマ'}</span><span class="clock num" data-clock>${clock()}</span></div>
           <div class="nm">${esc(evName(cur))}</div><div class="tk">${esc(evTask(cur))}</div>
@@ -552,7 +618,7 @@
       .map(x => {
         const study = x.p.type === 'study', tk = evTask(x), rng = study ? evRange(x) : '';
         return {
-          id: `${x.key}_${x.s.i}`,
+          id: `${x.key}_${x.uid}`,
           title: study ? `${x.done ? '✓ ' : ''}${evName(x)}${tk ? `：${tk}` : ''}` : `${evName(x)}（講義）`,
           start: atMin(x.shown, x.a), end: atMin(x.shown, x.b),
           desc: [rng && `今週の範囲：${rng}`, `第${w}週・${W(w).phase}`, '診断士プランから自動で作成（アプリで動かすと、ここも動きます）'].filter(Boolean).join('\n'),
@@ -585,7 +651,7 @@
   // 反映する期間。2セメ（後期）は学年暦で授業が 2/3（水）まで → その週（月〜日）の終わりまで
   const SEM_END = '2027-02-03';
   const GCAL_SPANS = [['near', '今週と来週だけ'], ['sem', '2セメの終わりまで（2/7）'], ['all', '計画の最後まで（試験まで）']];
-  const PER_RUN = 3;                     // 1回に送るのは3週まで（Google の作成回数の制限を避ける）
+  const PER_RUN = 2;                     // 1回に送るのは2週まで（Google の作成回数の制限を避ける。25分コマで1週40件ほど）
   let gMore = 0, gLeft = 0;
 
   function gcalWeeks() {
@@ -922,8 +988,10 @@
     const el = drag.el, r = el.getBoundingClientRect();
     drag.active = true;
     drag.allDay = el.dataset.allday === '1';
+    drag.flex = el.dataset.flex === '1';
     drag.dur = +el.dataset.dur;
-    drag.grabY = drag.y0 - r.top;
+    drag.grabY = drag.flex && drag.allDay ? 8 : drag.y0 - r.top;
+    drag.cvar = el.style.getPropertyValue('--c');
     const g = el.cloneNode(true);
     g.classList.add('ghost');
     g.removeAttribute('data-action');
@@ -940,13 +1008,22 @@
 
   // 指（マウス）の位置から、置き先の曜日と時刻を決める
   function placeGhost() {
-    const sel = drag.allDay ? '.cal-allday .ad' : '.cal-body .col';
+    let allDay = drag.allDay;
+    if (drag.flex) {   // 時間の欄の上に来たら時間つき、それより上なら「終日」
+      const body = $view.querySelector('.cal-body');
+      allDay = !body || drag.y < body.getBoundingClientRect().top;
+    }
+    if (drag.flex && drag.ghost.dataset.zone !== String(allDay)) {
+      drag.ghost.dataset.zone = String(allDay);
+      drag.ghost.style.cssText = drag.cvar ? `--c:${drag.cvar}` : '';
+    }
+    const sel = allDay ? '.cal-allday .ad' : '.cal-body .col';
     const cells = [...$view.querySelectorAll(sel)];
     if (!cells.length) return;
     let k = cells.findIndex(c => { const r = c.getBoundingClientRect(); return drag.x >= r.left && drag.x < r.right; });
     if (k < 0) k = drag.x < cells[0].getBoundingClientRect().left ? 0 : cells.length - 1;
     const cell = cells[k], g = drag.ghost;
-    if (drag.allDay) {
+    if (allDay) {
       drag.target = { col: k, a: null };
       g.querySelector('.gt').textContent = '';
       if (g.parentNode !== cell) cell.appendChild(g);
@@ -995,11 +1072,20 @@
       extOps([{ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne }], () => { e.start = ns; e.end = ne; }, `「${e.title}」を ${when} に動かしました`);
       return;
     }
-    const key = el.dataset.d, i = +el.dataset.i, s = SLOTS[i];
+    const key = el.dataset.d, uid = el.dataset.u, u = findUnit(key, uid);
+    if (!u) return;
     const day = ui.calDays[target.col], nk = ymd(day);
-    const k = moveKey(key, i), before = S.moves[k];
-    if (nk === key && (s.a == null || target.a === s.a)) delete S.moves[k];
-    else S.moves[k] = s.a == null ? { d: nk } : { d: nk, a: target.a };
+    const k = moveKey(key, uid), before = S.moves[k];
+    if (u.k != null && !before && S.moves[moveKey(key, u.s.i)]) {
+      // 分ける前に90分ごと動かしていたら、残りの2つの位置を固定してから、このコマだけ動かす
+      unitsOf(parse(key)).filter(v => v.k != null && v.s.i === u.s.i && v.uid !== uid).forEach(v => {
+        const m = getMove(key, v); if (m) S.moves[moveKey(key, v.uid)] = m;
+      });
+      delete S.moves[moveKey(key, u.s.i)];
+    }
+    const same = u.flex ? target.a == null : (u.a0 == null || target.a === u.a0);
+    if (nk === key && same) delete S.moves[k];
+    else S.moves[k] = (u.a0 == null && !u.flex) || target.a == null ? { d: nk } : { d: nk, a: target.a };
     if (JSON.stringify(before) === JSON.stringify(S.moves[k])) return;
     save(); render();
     toast(S.moves[k] ? `${mdw(day)}${target.a == null ? '' : ` ${hm(target.a)}`} に移動しました` : '元の時間に戻しました');
@@ -1315,13 +1401,14 @@
         <label class="field"><span>試験日（1日目）</span><input name="exam" type="date" value="${esc(st.exam)}" required></label>
       </div>
       <span class="hint small faint" id="start-hint">開始日は月曜にする（週は月〜日で区切る）。試験日は例年8月の第1土日なので、正式な日程が出たら直す。</span>
+      <label class="check-row"><input name="pomo" type="checkbox" ${st.pomo !== false ? 'checked' : ''}> 90分のコマを25分×3（間に5分休憩）に分け、休憩で減った分を財務・会計の追加コマにする</label>
       <label class="field"><span>表示</span><select name="theme">
         <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末の設定に合わせる</option>
         <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
         <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
       ${actions(false)}
       <div class="settings-group"><h3>Googleカレンダー連携</h3>
-        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（下の「反映する期間」の分。最初はまとめて送らず、20秒おきに3週ずつ送ります）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
+        <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（下の「反映する期間」の分。最初はまとめて送らず、20秒おきに2週ずつ送ります）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
         <label class="field"><span>合言葉</span><input name="gtoken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.gcal.token)}"></label>
         <label class="field"><span>反映する期間</span><select name="gspan">${GCAL_SPANS.map(([v, n]) => `<option value="${v}" ${(st.gcal.span || 'sem') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -1424,7 +1511,7 @@
         span: fval('gspan') || 'sem',
       };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
-      S.settings = { ...st, start, exam, theme: fval('theme'), gcal };
+      S.settings = { ...st, start, exam, theme: fval('theme'), pomo: !!$form.elements.pomo.checked, gcal };
       if (reconnect) {
         // つなぎ先が変わったら、まず保管してある記録を読み込む（空の記録で上書きしないため）。カレンダーは全部送り直す
         S.gsync = { hash: {}, last: 0, err: '', clast: 0, cerr: '' };
@@ -1510,15 +1597,15 @@
       case 'calweek': {
         const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
-      case 'slot': openSlot(+el.dataset.i, el.dataset.d); break;
+      case 'slot': openSlot(el.dataset.u, el.dataset.d); break;
       case 'ext': openExt(el.dataset.k, +el.dataset.n); break;
       case 'openday': case 'dayjump': ui.day = el.dataset.d; ui.scrollNow = true; render(); break;
       case 'dayshift': ui.day = ymd(addDays(parse(ui.day), +el.dataset.v)); ui.scrollNow = true; render(); break;
       case 'daytoday': ui.day = ymd(today()); ui.scrollNow = true; render(); break;
       case 'dayback': backToWeek(); render(); window.scrollTo(0, 0); break;
       case 'quickdone': {
-        const i = +el.dataset.i, on = toggleCheck(el.dataset.d, i);
-        render(); toast(on ? `記録しました（＋${fmtH(SLOTS[i].hours)}h）` : '未完了に戻しました'); break;
+        const uid = el.dataset.u, on = toggleCheck(el.dataset.d, uid);
+        render(); toast(on ? `記録しました（＋${fmtGain(unitHours(uid))}）` : '未完了に戻しました'); break;
       }
       case 'unmove-week': {
         const keys = new Set((ui.calDays || []).map(ymd));
