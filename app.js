@@ -10,7 +10,7 @@
 
   // ---------- 保存データ ----------
   function blank() {
-    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', pomo: true, gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true, span: 'sem' } },
+    return { v: 1, settings: { start: PLAN.start, exam: PLAN.exam, theme: 'auto', pomo: true, dailyAt: '12:15', gcal: { url: '', token: '', lectures: false, color: '9', read: [], hideLect: true, span: 'sem' } },
       weeks: {}, checks: {}, moves: {}, gsync: { hash: {}, last: 0, err: '', clast: 0, cerr: '' }, updatedAt: 0,
       ov: { plan: {}, target: {}, pattern: {}, tt: {}, gantt: {} } };
   }
@@ -175,6 +175,9 @@
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
   const pomoOn = () => S.settings.pomo !== false;
+  // 毎日の財務・会計の計算1問（15分）を置く時間。'' なら時間を決めず「終日」の段に出す
+  const DAILY_TIMES = [['8:20', '朝（8:20〜8:35）'], ['12:15', '昼休み（12:15〜12:30）'], ['18:00', '夕方（18:00〜18:15）'], ['22:00', '夜（22:00〜22:15）'], ['', '時間を決めない']];
+  const dailyMin = () => { const t = S.settings.dailyAt; if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   const pomoCount = s => Math.max(1, Math.floor((s.b - s.a + BREAK) / (POMO + BREAK)));   // 90分→3、70分→2
   const EXTRA_TEXT = '財務・会計：休憩で減った分の演習（すきま時間に置く）';
 
@@ -185,7 +188,9 @@
       if (s.day !== '毎日' && s.day !== dc) return;
       const text = ttCell(s.i, pi);
       if (!text) return;
-      if (pomoOn() && s.a != null && parseTask(text).type === 'study') {
+      if (s.day === '毎日' && dailyMin() != null) {   // 毎日の財務1問（15分）は決めた時間に置く
+        out.push({ uid: String(s.i), s, a0: dailyMin(), dur: 15, hours: s.hours });
+      } else if (pomoOn() && s.a != null && parseTask(text).type === 'study') {
         const n = pomoCount(s);
         for (let k = 0; k < n; k++) out.push({ uid: `${s.i}.${k}`, s, k, n, a0: s.a + k * (POMO + BREAK), dur: POMO, hours: POMO / 60 });
       } else {
@@ -1402,6 +1407,7 @@
       </div>
       <span class="hint small faint" id="start-hint">開始日は月曜にする（週は月〜日で区切る）。試験日は例年8月の第1土日なので、正式な日程が出たら直す。</span>
       <label class="check-row"><input name="pomo" type="checkbox" ${st.pomo !== false ? 'checked' : ''}> 90分のコマを25分×3（間に5分休憩）に分け、休憩で減った分を財務・会計の追加コマにする</label>
+      <label class="field"><span>毎日の財務・会計の計算1問（15分）の時間</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${(st.dailyAt ?? '12:15') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="field"><span>表示</span><select name="theme">
         <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末の設定に合わせる</option>
         <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
@@ -1511,7 +1517,7 @@
         span: fval('gspan') || 'sem',
       };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
-      S.settings = { ...st, start, exam, theme: fval('theme'), pomo: !!$form.elements.pomo.checked, gcal };
+      S.settings = { ...st, start, exam, theme: fval('theme'), pomo: !!$form.elements.pomo.checked, dailyAt: fval('daily'), gcal };
       if (reconnect) {
         // つなぎ先が変わったら、まず保管してある記録を読み込む（空の記録で上書きしないため）。カレンダーは全部送り直す
         S.gsync = { hash: {}, last: 0, err: '', clast: 0, cerr: '' };
