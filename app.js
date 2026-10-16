@@ -177,8 +177,12 @@
   const pomoOn = () => S.settings.pomo !== false;
   // 毎日の財務・会計の計算1問（15分）を置く時間。'' なら時間を決めず「終日」の段に出す
   const DAILY_TIMES = [['8:20', '朝（8:20〜8:35）'], ['12:45', '昼休み（12:45〜13:00）'], ['18:00', '夕方（18:00〜18:15）'], ['22:00', '夜（22:00〜22:15）'], ['', '時間を決めない']];
-  if (S.settings.dailyAt === '12:15') S.settings.dailyAt = '12:45';   // 昼休みは 12:45〜 に変更（前の設定を置き換え）
-  const dailyMin = () => { const t = S.settings.dailyAt; if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const dailyMin = () => {
+    const t = S.settings.dailyAt === '12:15' ? '12:45' : S.settings.dailyAt;   // 昼休みは 12:45〜 に変更（前の設定・保管分も置き換え）
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
   const pomoCount = s => Math.max(1, Math.floor((s.b - s.a + BREAK) / (POMO + BREAK)));   // 90分→3、70分→2
   const EXTRA_TEXT = '財務・会計：休憩で減った分の演習（すきま時間に置く）';
 
@@ -1408,7 +1412,7 @@
       </div>
       <span class="hint small faint" id="start-hint">開始日は月曜にする（週は月〜日で区切る）。試験日は例年8月の第1土日なので、正式な日程が出たら直す。</span>
       <label class="check-row"><input name="pomo" type="checkbox" ${st.pomo !== false ? 'checked' : ''}> 90分のコマを25分×3（間に5分休憩）に分け、休憩で減った分を財務・会計の追加コマにする</label>
-      <label class="field"><span>毎日の財務・会計の計算1問（15分）の時間</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${(st.dailyAt ?? '12:45') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="field"><span>毎日の財務・会計の計算1問（15分）の時間</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${(st.dailyAt === '12:15' ? '12:45' : (st.dailyAt ?? '12:45')) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <label class="field"><span>表示</span><select name="theme">
         <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末の設定に合わせる</option>
         <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
