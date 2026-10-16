@@ -930,6 +930,84 @@
     $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });
   }
 
+  // ---------- コマが終わったら、音なしで目立たせる（画面全体のお知らせ・振動・タブ名の点滅） ----------
+  const finishShown = new Set();
+  let lastFinishCheck = Date.now(), titleBlink = 0;
+
+  // 今日の勉強のコマ（時間つき・今日に置いてあるもの）
+  function todayStudy() {
+    const t = today(), days = weekDaysOf(t);
+    return weekEvents(days).filter(x => x.p.type === 'study' && x.a != null && diff(t, x.shown) === 0)
+      .sort((p, q) => p.a - q.a);
+  }
+
+  function checkFinished(lookbackMs) {
+    if (document.hidden) return;
+    if ($dlg.open || drag || document.querySelector('.finish')) return;   // 閉じたあとに知らせる（時刻は進めない）
+    const now = Date.now(), since = lookbackMs ? now - lookbackMs : lastFinishCheck;
+    lastFinishCheck = now;
+    const t = today();
+    const ended = todayStudy().filter(x => {
+      const end = atMin(t, x.b);
+      return end > since && end <= now && !x.done && !finishShown.has(`${x.key}|${x.uid}`);
+    });
+    if (ended.length) showFinish(ended[ended.length - 1]);   // 一番最近終わったもの
+  }
+
+  function showFinish(x) {
+    finishShown.add(`${x.key}|${x.uid}`);
+    const t = today(), nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    const next = todayStudy().find(y => y.a >= nowMin && y.uid !== x.uid);
+    const mins = Math.round(x.hours * 60);
+    const confetti = Array.from({ length: 28 }, (_, i) =>
+      `<i style="left:${(i * 37) % 100}%;animation-delay:${(i % 7) * 0.12}s;--r:${(i * 53) % 360}deg;--h:${(i * 47) % 360}"></i>`).join('');
+    const wrap = document.createElement('div');
+    wrap.className = 'finish';
+    wrap.style.setProperty('--c', x.c || 'var(--accent)');
+    wrap.setAttribute('role', 'alertdialog');
+    wrap.setAttribute('aria-label', 'コマが終わりました');
+    wrap.innerHTML = `<div class="fin-flash"></div><div class="fin-confetti" aria-hidden="true">${confetti}</div>
+      <div class="fin-card">
+        <div class="fin-big">✓</div>
+        <h2>${mins}分おつかれさま！</h2>
+        <p class="fin-what">${esc(evName(x))}${x.u && x.u.k != null ? ` ${'①②③④'[x.u.k]}` : ''}　<span class="num">${hm(x.a)}〜${hm(x.b)}</span></p>
+        ${next ? `<p class="fin-next">${next.a - nowMin <= 5 ? '5分休憩' : '休憩'} → 次は <b>${esc(evName(next))}</b>（<span class="num">${hm(next.a)}〜</span>）<br>あと <b class="num" data-cd="${atMin(t, next.a)}">${fmtLeft(atMin(t, next.a) - Date.now())}</b></p>` : '<p class="fin-next">今日のコマはこれで最後です</p>'}
+        <div class="fin-btns">
+          <button class="btn fin-later" type="button" data-fin="close">まだ途中</button>
+          <button class="btn primary" type="button" data-fin="done">終わった（＋${fmtGain(x.hours)}）</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.querySelector('[data-fin="done"]').focus();
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 500]);
+    const base = document.title;
+    let on = false;
+    clearInterval(titleBlink);
+    titleBlink = setInterval(() => { on = !on; document.title = on ? '⏰ コマ終了' : base; }, 1000);
+    const tick = setInterval(() => {
+      wrap.querySelectorAll('[data-cd]').forEach(el => { el.textContent = fmtLeft(+el.dataset.cd - Date.now()); });
+    }, 1000);
+    const close = () => {
+      clearInterval(titleBlink); clearInterval(tick); document.title = base;
+      wrap.classList.add('out');
+      setTimeout(() => wrap.remove(), 250);
+    };
+    wrap.addEventListener('click', e => {
+      const b = e.target.closest('[data-fin]');
+      if (!b) return;
+      if (b.dataset.fin === 'done') {
+        if (!isDone(x.key, x.u)) toggleCheck(x.key, x.uid);
+        render(); toast(`記録しました（＋${fmtGain(x.hours)}）`);
+      }
+      close();
+    });
+  }
+
+  setInterval(() => checkFinished(0), 1000);
+  // アプリを閉じている間に終わったコマも、30分以内なら開いたときに知らせる
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => checkFinished(30 * 60000), 300); });
+  setTimeout(() => checkFinished(30 * 60000), 1500);
+
   // ---------- 左右のスワイプで週・日を切り替える（Googleカレンダーと同じ） ----------
   let swipe = null;
   $view.addEventListener('touchstart', e => {

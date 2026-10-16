@@ -436,6 +436,37 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 @media (min-width: 560px) {
   .kpis { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---------- コマが終わったときのお知らせ ---------- */
+.finish { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px;
+  background: color-mix(in srgb, var(--c) 45%, rgba(10, 12, 16, .55)); animation: fin-in .25s ease-out; overflow: hidden; }
+.finish.out { opacity: 0; transition: opacity .25s; }
+.fin-flash { position: absolute; inset: 0; background: var(--c); animation: fin-flash .7s ease-in-out 3; opacity: 0; pointer-events: none; }
+.fin-card { position: relative; width: min(420px, 100%); background: var(--surface); color: var(--text); border-radius: 22px; padding: 26px 22px 18px; text-align: center;
+  box-shadow: 0 0 0 6px var(--c), 0 24px 60px rgba(0, 0, 0, .35); animation: fin-pop .5s cubic-bezier(.2, 1.4, .4, 1); }
+.fin-big { width: 76px; height: 76px; margin: -64px auto 8px; border-radius: 50%; display: grid; place-items: center; font-size: 42px; font-weight: 900;
+  color: #fff; background: var(--c); box-shadow: 0 0 0 6px var(--surface); animation: fin-pulse 1.2s ease-in-out infinite; }
+.fin-card h2 { margin: 4px 0 6px; font-size: 26px; font-weight: 900; letter-spacing: .02em; }
+.fin-what { margin: 0; font-size: 15px; font-weight: 700; }
+.fin-what .num { color: var(--muted); font-weight: 600; font-size: 13px; }
+.fin-next { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); line-height: 1.7; }
+.fin-next b { color: var(--text); }
+.fin-next b.num { font-size: 22px; color: var(--now); }
+.fin-btns { display: flex; gap: 8px; margin-top: 16px; }
+.fin-btns .btn { flex: 1; min-height: 48px; font-size: 15px; }
+.fin-confetti { position: absolute; inset: 0; pointer-events: none; }
+.fin-confetti i { position: absolute; top: -20px; width: 9px; height: 15px; border-radius: 2px;
+  background: hsl(var(--h) 85% 60%); transform: rotate(var(--r)); animation: fin-fall 2.4s cubic-bezier(.3, .6, .5, 1) forwards; }
+@keyframes fin-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fin-flash { 0%, 100% { opacity: 0; } 50% { opacity: .85; } }
+@keyframes fin-pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes fin-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes fin-fall { to { top: 110%; transform: rotate(calc(var(--r) + 540deg)) translateX(40px); } }
+@media (prefers-reduced-motion: reduce) {
+  .fin-flash { animation: none; opacity: .35; }
+  .fin-confetti { display: none; }
+  .fin-card, .fin-big { animation: none; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 .xtimes[hidden] { display: none; }
