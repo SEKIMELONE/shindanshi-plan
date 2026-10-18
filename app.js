@@ -124,8 +124,14 @@
     return h;
   }
   function checkedHours(w) {
+    const s0 = weekStart(w), e0 = addDays(s0, 7);
     let h = 0;
-    for (let k = 0; k < 7; k++) h += dayHours(ymd(addDays(weekStart(w), k)));
+    for (const key in S.checks) for (const id in S.checks[key]) {
+      if (!S.checks[key][id]) continue;
+      const m = S.moves[`${key}|${id}`];
+      const d = parse(m && m.carry ? m.d : key);   // 持ち越したコマは、置いた先の週で数える
+      if (d >= s0 && d < e0) h += unitHours(id);
+    }
     return h;
   }
   const actual = w => Math.max(0, checkedHours(w) + (wk(w).adj || 0));
@@ -233,8 +239,11 @@
       const old = S.moves[moveKey(key, u.s.i)];
       if (old) m = { d: old.d, a: old.a == null ? null : old.a + u.k * (POMO + BREAK) };
     }
-    return m && rawWeek(parse(m.d)) === rawWeek(parse(key)) ? m : null;
+    if (!m) return null;
+    const gap = rawWeek(parse(m.d)) - rawWeek(parse(key));
+    return gap === 0 || (m.carry && gap > 0 && gap <= CARRY_WEEKS) ? m : null;
   }
+  const CARRY_WEEKS = 3;   // 持ち越せるのは3週先まで
   function isDone(key, u) {
     const c = S.checks[key] || {};
     return !!(c[u.uid] || (u.k != null && c[u.s.i]));   // 分ける前に90分ごと「終わった」にしたもの
@@ -253,14 +262,15 @@
     const c = p.type === 'study' ? (idxs.length ? color(SUBJ[idxs[0]]) : color(OTHER)) : '';
     const key = ymd(date);
     const mv = getMove(key, u);
-    const a = u.flex ? (mv && mv.a != null ? mv.a : null) : (u.a0 == null ? null : (mv && mv.a != null ? mv.a : u.a0));
-    const mark = u.extra ? '（追加）' : u.k != null ? '①②③④'[u.k] : '';
+    const carry = !!(mv && mv.carry), flex = !!u.flex || carry;
+    const a = flex ? (mv && mv.a != null ? mv.a : null) : (u.a0 == null ? null : (mv && mv.a != null ? mv.a : u.a0));
+    const mark = (u.extra ? '（追加）' : u.k != null ? '①②③④'[u.k] : '') + (carry ? '（持ち越し）' : '');
     return {
-      s, u, uid: u.uid, w, date, key, text, p, idxs, subjName, short: short + mark, task, c, flex: !!u.flex,
+      s, u, uid: u.uid, w, date, key, text, p, idxs, subjName, short: short + mark, task, c, flex, carry,
       // 分ける前に90分ごと記録したものは、実際にやった90分のまま数える（3つで1.5h）
       hours: u.k != null && !(S.checks[key] || {})[u.uid] && (S.checks[key] || {})[s.i] ? s.hours / u.n : u.hours,
       done: isDone(key, u),
-      shown: mv ? parse(mv.d) : date, a, b: a == null ? null : a + u.dur, moved: !!mv,
+      shown: mv ? parse(mv.d) : date, a, b: a == null ? null : a + (u.dur || 0), moved: !!mv,
     };
   }
 
@@ -271,7 +281,30 @@
       const x = slotInfo(u, d);
       if (x) { x.col = diff(days[0], x.shown); evs.push(x); }
     }));
+    // 前の週（3週前まで）から持ち越してきたコマ
+    const hasCarry = Object.values(S.moves).some(m => m && m.carry);
+    if (hasCarry) for (let back = 1; back <= CARRY_WEEKS; back++) for (let k = 0; k < 7; k++) {
+      const d = addDays(days[0], -7 * back + k), key = ymd(d);
+      unitsOf(d).forEach(u => {
+        const m = S.moves[moveKey(key, u.uid)];
+        if (!m || !m.carry) return;
+        const x = slotInfo(u, d);
+        if (!x) return;
+        const col = diff(days[0], x.shown);
+        if (col >= 0 && col < days.length) { x.col = col; evs.push(x); }
+      });
+    }
     return evs;
+  }
+  // 持ち越せるコマ：勉強・未完了・毎日の1問や予備／振り返り以外。時間つきは終わる時刻が過ぎたもの、時間未定は日曜から
+  function carryable(x, days) {
+    if (x.p.type !== 'study' || x.done || x.s.day === '毎日' || x.hours === 0) return false;
+    if (x.col < 0 || x.col >= 7) return false;
+    if (x.a != null) return atMin(x.shown, x.b) <= Date.now();
+    return diff(days[6], today()) >= 0;
+  }
+  function carryOver(x) {
+    S.moves[moveKey(x.key, x.uid)] = { d: ymd(addDays(x.shown, 7)), carry: true };
   }
 
   // 重なったコマを横に並べる（Googleカレンダーと同じ考え方）
@@ -302,7 +335,7 @@
   // mode: 'chip'（週表示の終日）／'week'（週表示）／'day'（日表示）
   function evHtml(x, style, isNow, mode = 'week') {
     const movable = x.p.type === 'study';
-    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : ''].join(' ');
+    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : '', x.carry ? 'carry' : ''].join(' ');
     const when = x.a == null ? '' : ` ${hm(x.a)}〜${hm(x.b)}`;
     const label = `${mdw(x.shown)}${when} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}${x.moved ? '（移動済み）' : ''}`;
     let inner = `<b>${esc(x.short)}</b>${x.task && mode === 'week' ? `<span>${esc(x.task)}</span>` : ''}`;
@@ -311,7 +344,7 @@
       inner = `${x.a == null ? '' : `<i class="tm num">${hm(x.a)}〜${hm(x.b)}</i>`}<b>${esc(evName(x))}</b>${tk ? `<span>${esc(tk)}</span>` : ''}${rng ? `<small>${esc(rng)}</small>` : ''}`;
     }
     return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-u="${x.uid}" data-d="${x.key}"
-      ${movable ? `data-movable="1" data-dur="${x.flex ? POMO : x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"${x.flex ? ' data-flex="1"' : ''}` : ''} aria-label="${esc(label)}">${inner}</button>`;
+      ${movable ? `data-movable="1" data-dur="${x.flex ? (x.u.dur || POMO) : x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"${x.flex ? ' data-flex="1"' : ''}` : ''} aria-label="${esc(label)}">${inner}</button>`;
   }
 
   function renderCal() {
@@ -342,8 +375,14 @@
     const head = days.map((d, k) =>
       `<button class="dh${k === todayCol ? ' today' : ''}" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の予定を開く"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></button>`).join('');
 
-    const allday = days.map((_, k) =>
-      `<div class="ad" data-col="${k}">${evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip')).join('')}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}</div>`).join('');
+    const allday = days.map((d, k) => {
+      const mine = evs.filter(x => x.col === k && x.a == null);
+      const carried = mine.filter(x => x.carry), rest = mine.filter(x => !x.carry);
+      // 持ち越しが多い日は2件だけ出して、残りはまとめる（タップでその日のページ）
+      const more = carried.length > 2
+        ? `<button class="ev study carry more" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の持ち越し ほか${carried.length - 2}件"><b>持ち越し＋${carried.length - 2}</b></button>` : '';
+      return `<div class="ad" data-col="${k}">${rest.concat(carried.slice(0, 2)).map(x => evHtml(x, '', false, 'chip')).join('')}${more}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}</div>`;
+    }).join('');
 
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
@@ -363,7 +402,8 @@
 
     const ranges = SUBJ.slice(0, STUDY_N).map((name, i) => [name, range(w, i)]).filter(([, r]) => r)
       .map(([name, r]) => `<li><span class="dot" style="background:${color(name)}"></span><div><div class="nm">${esc(name)}</div><div class="tx">${esc(r)}</div></div></li>`).join('');
-    const movedN = evs.filter(x => x.moved).length;
+    const movedN = evs.filter(x => x.moved && !x.carry && x.col >= 0 && x.col < 7).length;
+    const carryN = w < N ? evs.filter(x => carryable(x, days)).length : 0;
 
     return `
       <div class="calnav">
@@ -396,6 +436,7 @@
       <div class="cal-foot">
         <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。${extOn() ? '空いているところをタップで予定を追加。' : ''}</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
+        ${carryN ? `<button class="btn small" data-action="carry-week">終わっていないコマを次の週へ（${carryN}件）</button>` : ''}
         ${gcalOn() ? `<p class="small faint gsync${S.gsync.err || S.gsync.cerr || S.gsync.xerr ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
@@ -431,14 +472,16 @@
     const orig = x.flex ? `${mdw(x.date)}（時間未定）` : `${mdw(x.date)} ${s.day === '毎日' ? '' : esc(s.period)}${u.a0 == null ? '' : `（${hm(u.a0)}〜${hm(u.a0 + u.dur)}）`}`;
     openDlg(`<h2>${esc(title)}</h2>
       <p class="small muted">${mdw(x.shown)} · ${when}${x.done ? ' · <span class="pill good">✓ 完了</span>' : ''}</p>
-      ${x.moved ? `<p class="small faint">移動済み。元は ${orig}</p>` : ''}
+      ${x.moved ? `<p class="small faint">${x.carry ? '前の週から持ち越し' : '移動済み'}。元は ${orig}</p>` : ''}
       <p>${x.p.type === 'lecture' ? '<span class="muted">講義（参考として表示）</span>' : esc(x.text)}${u.k != null ? `<br><span class="small faint">90分のコマの ${u.k + 1}/${u.n} つ目（25分。終わったら5分休憩）</span>` : ''}${x.flex && x.a == null ? '<br><span class="small faint">空いている時間にドラッグして置いてください</span>' : ''}</p>
       ${rng.length ? `<div class="field"><span>この週の範囲</span>${rng.map(([j, r]) => `<div class="rg"><span class="dot" style="background:${color(SUBJ[j])}"></span><span>${rng.length > 1 ? `<b>${esc(SUBJ[j])}</b>　` : ''}${esc(r)}</span></div>`).join('')}</div>` : ''}
       <div class="dlg-actions">
-        ${x.moved ? '<button class="btn ghost" data-dlg="unmove" type="button">元の時間に戻す</button>' : ''}<span class="spacer"></span>
+        ${x.moved ? `<button class="btn ghost" data-dlg="unmove" type="button">${x.carry ? '持ち越しをやめる' : '元の時間に戻す'}</button>` : ''}
+        ${study && !x.done && s.day !== '毎日' && x.hours && weekOf(x.shown) < N ? '<button class="btn ghost" data-dlg="carry" type="button">次の週へ持ち越す</button>' : ''}<span class="spacer"></span>
         <button class="btn" data-dlg="cancel" type="button">閉じる</button>
         ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${x.hours ? `（＋${fmtGain(x.hours)}）` : ''}`}</button>` : ''}
       </div>`, act => {
+      if (act === 'carry') { carryOver(x); save(); render(); toast(`${mdw(addDays(x.shown, 7))}の「終日」の段へ持ち越しました`); return; }
       if (act === 'unmove') {
         delete S.moves[moveKey(key, uid)];
         if (u.k != null) delete S.moves[moveKey(key, s.i)];   // 分ける前の動かし方も消す
@@ -624,7 +667,7 @@
     const days = Array.from({ length: 7 }, (_, k) => addDays(weekStart(w), k));
     const lect = S.settings.gcal.lectures;
     const events = weekEvents(days)
-      .filter(x => x.a != null && (x.p.type === 'study' || (lect && x.p.type === 'lecture')))
+      .filter(x => x.a != null && x.col >= 0 && x.col < 7 && (x.p.type === 'study' || (lect && x.p.type === 'lecture')))
       .map(x => {
         const study = x.p.type === 'study', tk = evTask(x), rng = study ? evRange(x) : '';
         return {
@@ -1172,7 +1215,8 @@
       delete S.moves[moveKey(key, u.s.i)];
     }
     const same = u.flex ? target.a == null : (u.a0 == null || target.a === u.a0);
-    if (nk === key && same) delete S.moves[k];
+    if (before && before.carry) S.moves[k] = target.a == null ? { d: nk, carry: true } : { d: nk, a: target.a, carry: true };
+    else if (nk === key && same) delete S.moves[k];
     else S.moves[k] = (u.a0 == null && !u.flex) || target.a == null ? { d: nk } : { d: nk, a: target.a };
     if (JSON.stringify(before) === JSON.stringify(S.moves[k])) return;
     save(); render();
@@ -1695,6 +1739,14 @@
       case 'quickdone': {
         const uid = el.dataset.u, on = toggleCheck(el.dataset.d, uid);
         render(); toast(on ? `記録しました（＋${fmtGain(unitHours(uid))}）` : '未完了に戻しました'); break;
+      }
+      case 'carry-week': {
+        const days = ui.calDays || [];
+        const list = weekEvents(days).filter(x => carryable(x, days));
+        if (!list.length) break;
+        list.forEach(carryOver);
+        save(); render();
+        toast(`${list.length}件を次の週の「終日」の段へ持ち越しました`); break;
       }
       case 'unmove-week': {
         const keys = new Set((ui.calDays || []).map(ymd));
