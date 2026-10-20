@@ -182,7 +182,7 @@
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
   const pomoOn = () => S.settings.pomo !== false;
   // 毎日の財務・会計の計算1問（15分）を置く時間。'' なら時間を決めず「終日」の段に出す
-  const DAILY_TIMES = [['8:20', '朝（8:20〜8:35）'], ['12:45', '昼休み（12:45〜13:00）'], ['18:00', '夕方（18:00〜18:15）'], ['22:00', '夜（22:00〜22:15）'], ['', '時間を決めない']];
+  const DAILY_TIMES = [['8:20', '朝 8:20〜'], ['12:45', '昼休み 12:45〜'], ['18:00', '夕方 18:00〜'], ['22:00', '夜 22:00〜'], ['', '時間を決めない']];
   const dailyAt = we => we
     ? (S.settings.dailyAtWE ?? '22:00')   // 土日は昼休みがないので、平日とは別の時間
     : (S.settings.dailyAt === '12:15' ? '12:45' : (S.settings.dailyAt ?? '12:45'));   // 昼休みは 12:45〜 に変更（前の設定・保管分も置き換え）
@@ -825,6 +825,12 @@
   const extOn = () => gcalOn() && (S.settings.gcal.read || []).length > 0;
   const showEv = x => !(x.p.type === 'lecture' && extOn() && S.settings.gcal.hideLect);   // 講義はカレンダー側の予定で見る
   const extBusy = new Set();
+  // 読みに行っている間は、画面の上に「読み込み中」を出す（Apps Script は起きるまで数秒〜十数秒かかる）
+  const $extLoad = document.createElement('div');
+  $extLoad.className = 'ext-load'; $extLoad.hidden = true; $extLoad.setAttribute('role', 'status');
+  $extLoad.innerHTML = '<i></i>カレンダーの予定を読み込み中…';
+  document.body.appendChild($extLoad);
+  const extLoadShow = () => { $extLoad.hidden = extBusy.size === 0; };
   const msHm = ms => { const d = new Date(ms); return hm(d.getHours() * 60 + d.getMinutes()); };
 
   function extEnsure(days) {
@@ -833,7 +839,7 @@
     const sel = S.settings.gcal.read.map(x => x.id).join(',');
     if (c && c.sel === sel && Date.now() - c.at < 5 * 60000) return;
     if (extBusy.has(key) || !navigator.onLine) return;
-    extBusy.add(key);
+    extBusy.add(key); extLoadShow();
     gcalPost({ op: 'read', ids: S.settings.gcal.read.map(x => x.id), from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0) })
       .then(j => {
         const before = c && c.sel === sel ? JSON.stringify(c.events) : '';
@@ -848,7 +854,7 @@
       .catch(e => {   // 読めないときは前回の分を出しておき、理由を表示する
         S.gsync.xerr = String(e.message || e); persist(); updateSyncNote();
       })
-      .finally(() => extBusy.delete(key));
+      .finally(() => { extBusy.delete(key); extLoadShow(); });
   }
 
   // 表示用に、日ごと・時刻（分）に切り分ける。8時より前に終わる予定などは出さない
@@ -1530,7 +1536,7 @@
     const st = S.settings;
     const editedN = Object.values(S.ov).reduce((n, m) => n + Object.keys(m).length, 0);
     const movesN = Object.keys(S.moves).length;
-    openDlg(`<h2>設定</h2>
+    openDlg(`<h2 class="sticky-head">設定<button class="btn ghost small" data-dlg="cancel" type="button" aria-label="閉じる">✕</button></h2>
       <div class="row2">
         <label class="field"><span>学習開始日</span><input name="start" type="date" value="${esc(st.start)}" required></label>
         <label class="field"><span>試験日（1日目）</span><input name="exam" type="date" value="${esc(st.exam)}" required></label>
@@ -1538,14 +1544,13 @@
       <span class="hint small faint" id="start-hint">開始日は月曜にする（週は月〜日で区切る）。試験日は例年8月の第1土日なので、正式な日程が出たら直す。</span>
       <label class="check-row"><input name="pomo" type="checkbox" ${st.pomo !== false ? 'checked' : ''}> 90分のコマを25分×3（間に5分休憩）に分け、休憩で減った分を財務・会計の追加コマにする</label>
       <div class="row2">
-        <label class="field"><span>毎日の財務1問（15分）：平日</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(false) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-        <label class="field"><span>土日</span><select name="dailyWE">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(true) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field"><span>財務1問（15分）平日</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(false) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field"><span>財務1問（15分）土日</span><select name="dailyWE">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(true) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
       <label class="field"><span>表示</span><select name="theme">
         <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末の設定に合わせる</option>
         <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
         <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
-      ${actions(false)}
       <div class="settings-group"><h3>Googleカレンダー連携</h3>
         <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（下の「反映する期間」の分。最初はまとめて送らず、20秒おきに2週ずつ送ります）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
@@ -1582,7 +1587,8 @@
           ${movesN ? `<button class="btn small" type="button" data-dlg="reset-moves">カレンダーの移動を元に戻す（${movesN}件）</button>` : ''}
           <button class="btn small danger" type="button" data-dlg="wipe">記録をすべて消す</button>
         </div>
-      </div>`, act => {
+      </div>
+      <div class="dlg-actions sticky-actions"><span class="spacer"></span><button class="btn" data-dlg="cancel" type="button">キャンセル</button><button class="btn primary" type="submit">保存</button></div>`, act => {
       if (act === 'export') { exportData(); return false; }
       if (act === 'gcopy') {
         fetch('gas/Code.gs', { cache: 'no-cache' }).then(r => r.text())
