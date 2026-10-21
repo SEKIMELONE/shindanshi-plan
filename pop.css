@@ -185,7 +185,8 @@
 [data-design="pop"] .sw-opt input:checked + i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
 
 /* 予定を入れるポップアップ */
-[data-design="pop"] .evsheet { border: 2px solid var(--ink); border-radius: 20px; box-shadow: var(--pop); animation: pop-in .26s var(--spring); }
+[data-design="pop"] .evsheet { animation: pop-in .26s var(--spring); }
+[data-design="pop"] .es-panel { border: 2px solid var(--ink); border-radius: 20px; box-shadow: var(--pop); }
 [data-design="pop"] .es-pointer { border: 2px solid var(--ink); width: 16px; height: 16px; }
 [data-design="pop"] .es-pointer[data-side="right"] { border-top-color: transparent; border-right-color: transparent; }
 [data-design="pop"] .es-pointer[data-side="left"] { border-bottom-color: transparent; border-left-color: transparent; }
@@ -244,3 +245,5 @@
 }
 /* 角が丸い（24px）ので、上下に固定した帯の中身を角から離す */
 [data-design="pop"] .sticky-actions { padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
+/* 予定の吹き出しの入れ物は透明。枠線・影は中の本体（.es-panel）に付ける */
+[data-design="pop"] dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: transparent; }

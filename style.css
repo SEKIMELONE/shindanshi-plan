@@ -515,12 +515,15 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 @media (min-width: 900px) { .fab { right: max(28px, calc(50% - 560px)); } }
 body.sheet-open .fab { display: none; }
 
-.evsheet { position: fixed; inset: auto; margin: 0; left: 8px; top: 8px; width: 380px; overflow: visible; z-index: 30;
-  border: 1px solid var(--border); padding: 0; border-radius: 18px; background: var(--surface); color: var(--text);
-  box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.08); animation: sheet-in .14s ease-out; }
+.evsheet { position: fixed; inset: auto; margin: 0; left: 8px; top: 8px; width: 412px; max-width: none; max-height: none; overflow: visible; z-index: 30;
+  border: 0; padding: 16px; background: transparent; color: var(--text); box-shadow: none; animation: sheet-in .14s ease-out; pointer-events: none; }
+.evsheet > * { pointer-events: auto; }
+.evsheet > .es-pointer { pointer-events: none; }
+.es-panel { position: relative; z-index: 1; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.08); }
 @keyframes sheet-in { from { transform: scale(.97); opacity: 0; } }
 /* 吹き出しの矢印（予定を指す） */
-.es-scroll { max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; overscroll-behavior: contain; padding: 4px 0 14px; border-radius: inherit; }
+.es-scroll { max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; overscroll-behavior: contain; padding: 4px 0 14px; }
 .es-pointer { position: absolute; z-index: 3; width: 14px; height: 14px; background: var(--surface); border: 1px solid var(--border); pointer-events: none; transform: translate(-50%, -50%) rotate(45deg); }
 .es-pointer[hidden] { display: none; }
 .es-pointer[data-side="right"] { border-top-color: transparent; border-right-color: transparent; }
@@ -620,3 +623,4 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-lbl2 { color: var(--muted); font-size: 13px; font-weight: 700; flex: none; }
 .es-until .es-sel { flex: 1; min-width: 150px; }
 .es-until .es-sel select { font-size: 14px; }
+dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: transparent; }

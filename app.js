@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v57';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v58';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1002,18 +1002,23 @@
   $sheet.className = 'evsheet';
   $sheet.setAttribute('aria-label', '予定');
   document.body.appendChild($sheet);
-  // 中身はスクロールする箱に入れ、矢印は吹き出し本体の子にする（いっしょに動き、枠線ともつながる）
+  // dialog は透明な入れ物にして、中に「本体（枠線・背景・スクロール）」と「矢印」を兄弟として並べる。
+  // 矢印が本体の枠線の上に重なって、つながって見える（Safari は dialog 自身の枠線の上に子を描かないことがあるため）
+  const $panel = document.createElement('div');
+  $panel.className = 'es-panel';
+  $sheet.appendChild($panel);
   const $scroll = document.createElement('div');
   $scroll.className = 'es-scroll';
-  $sheet.appendChild($scroll);
+  $panel.appendChild($scroll);
   const $arrow = document.createElement('i');
   $arrow.className = 'es-pointer'; $arrow.hidden = true; $arrow.setAttribute('aria-hidden', 'true');
   $sheet.appendChild($arrow);
-  // 矢印を、画面上の点 (ax, ay) に置く（吹き出しの左上からの位置に直す）
+  // 入れ物は本体のまわりに透明な余白を持つ（矢印が入れ物の外にはみ出さないように。はみ出しを切るブラウザがあるため）
+  const SHEET_PAD = 16;
+  // 矢印を、画面上の点 (ax, ay) に置く（入れ物の左上からの位置に直す）
   const setArrow = (side, ax, ay, left, top) => {
-    const bw = $sheet.clientLeft || 0;
     $sheet.dataset.side = side; $arrow.dataset.side = side;
-    $arrow.style.left = `${ax - left - bw}px`; $arrow.style.top = `${ay - top - bw}px`;
+    $arrow.style.left = `${ax - left + SHEET_PAD}px`; $arrow.style.top = `${ay - top + SHEET_PAD}px`;
   };
   const sheetOpen = () => $sheet.open;
   const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半']];
@@ -1228,11 +1233,11 @@
     $sheet.classList.toggle('glide', !!glide);
     const anchor = $view.querySelector('.ev.draft');
     const vw = document.documentElement.clientWidth, vh = window.visualViewport ? visualViewport.height : innerHeight;
-    const bw = $sheet.clientLeft || 0;
+    const bw = $panel.clientLeft || 0;
     const W = Math.min(380, vw - 16), H = $scroll.scrollHeight + bw * 2, gap = 12;
-    const fit = (left, top, h) => { Object.assign($sheet.style, { left: `${left}px`, top: `${top}px` }); $scroll.style.maxHeight = `${Math.max(120, h - bw * 2)}px`; };
+    const fit = (left, top, h) => { Object.assign($sheet.style, { left: `${left - SHEET_PAD}px`, top: `${top - SHEET_PAD}px` }); $scroll.style.maxHeight = `${Math.max(120, h - bw * 2)}px`; };
     const topLim = 8, botLim = vh - 8;
-    $sheet.style.width = `${W}px`;
+    $sheet.style.width = `${W + SHEET_PAD * 2}px`;
     if (!anchor) {   // 予定が画面にないときは真ん中
       const h = Math.min(H, botLim - topLim);
       fit((vw - W) / 2, Math.max(topLim, (vh - h) / 2), h);
@@ -1470,7 +1475,7 @@
     if (!d || !k) return;
     if (k === 'allday') {
       // 吹き出しの上端をその場に止め（スイッチが指から離れないように）、時刻の欄・長さボタンを下からなめらかにたたむ
-      d.pin = d.pin || { top: parseFloat($sheet.style.top) || 8, left: parseFloat($sheet.style.left) || 8 };   // 置いた位置（出てくる動きの途中の見た目ではなく）
+      d.pin = d.pin || { top: (parseFloat($sheet.style.top) || 0) + SHEET_PAD, left: (parseFloat($sheet.style.left) || 0) + SHEET_PAD };   // 置いた位置（出てくる動きの途中の見た目ではなく）
       const sw0 = $sheet.querySelector('.es-switch').getBoundingClientRect().top;
       d.allDay = t.checked; t.setAttribute('aria-checked', String(t.checked));
       $sheet.classList.toggle('is-allday', d.allDay);
