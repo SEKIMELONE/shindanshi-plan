@@ -613,3 +613,8 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-col-in { overflow: hidden; min-height: 0; }
 .evsheet.is-allday .es-col { grid-template-rows: 0fr; opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .es-col, .es-times { transition: none; } }
+.es-until { gap: 8px; flex-wrap: wrap; row-gap: 6px; min-height: 40px; }
+.es-until .es-ic-sp { margin-right: 10px; }
+.es-lbl2 { color: var(--muted); font-size: 13px; font-weight: 700; flex: none; }
+.es-until .es-sel { flex: 1; min-width: 150px; }
+.es-until .es-sel select { font-size: 14px; }

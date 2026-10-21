@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v54';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v55';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1007,12 +1007,16 @@
   document.body.appendChild($arrow);
   const sheetOpen = () => $sheet.open;
   const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半']];
+  // くり返しの選択肢（その日の曜日・日付に合わせて書く）
+  const repeatOpts = day => [['', '繰り返さない'], ['daily', '毎日'], ['weekly', `毎週 ${DAYS[day.getDay()]}曜日`], ['biweekly', `2週間ごと ${DAYS[day.getDay()]}曜日`],
+    ['weekdays', '平日（月〜金）'], ['monthly', `毎月 ${day.getDate()}日`], ['yearly', `毎年 ${day.getMonth() + 1}月${day.getDate()}日`]];
   const ICON = {
     clock: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/>',
     cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     color: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.4-1.2-1.6-1.2-2.9 0-1 .8-1.6 1.9-1.6h2.2c2.3 0 3.8-1.6 3.8-3.6C20.5 6.8 16.7 3.5 12 3.5Z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.6" r="1"/><circle cx="14.8" cy="7.6" r="1"/>',
     pin: '<path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11 6.5 11Z"/><circle cx="12" cy="10" r="2.3"/>',
     note: '<path d="M5 6.5h14M5 11.5h14M5 16.5h9"/>',
+    repeat: '<path d="M17 3.5l3 3-3 3"/><path d="M4 11.5v-1a4 4 0 0 1 4-4h12"/><path d="M7 20.5l-3-3 3-3"/><path d="M20 12.5v1a4 4 0 0 1-4 4H4"/>',
     warn: '<path d="M12 4 2.8 19.5h18.4L12 4Z"/><path d="M12 10v4.2M12 17.2v.1"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
   };
@@ -1121,6 +1125,14 @@
             <div class="es-row es-durs"><span class="es-ic-sp"></span><div class="es-chips">${DUR_CHIPS.map(([m, t]) => `<button type="button" class="es-chip${len === m ? ' on' : ''}" data-es="dur" data-v="${m}">${t}</button>`).join('')}</div></div>
             ${warn.length ? `<div class="es-row es-warn">${icon('warn')}<span>${esc(warn.slice(0, 2).join('、'))}${warn.length > 2 ? ` ほか${warn.length - 2}件` : ''}と重なっています</span></div>` : ''}
           </div></div>
+          ${edit ? (d.rec ? `<div class="es-row">${icon('repeat')}<span class="es-calname">くり返しの予定（この回だけ変わります）</span></div>` : '') : `
+          <div class="es-row">${icon('repeat')}<label class="es-sel"><select data-es="repeat" aria-label="繰り返し">${repeatOpts(day).map(([v, t]) => `<option value="${v}" ${(d.repeat || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
+          ${d.repeat ? `<div class="es-row es-until"><span class="es-ic-sp"></span><span class="es-lbl2">終わり</span>
+            <label class="es-sel"><select data-es="repeatend" aria-label="繰り返しの終わり">
+              <option value="" ${!d.repeatEnd ? 'selected' : ''}>なし（ずっと）</option>
+              <option value="sem" ${d.repeatEnd === 'sem' ? 'selected' : ''}>後期の授業が終わるまで（${md(parse(SEM_END))}）</option>
+              <option value="date" ${d.repeatEnd === 'date' ? 'selected' : ''}>日付を決める</option></select></label>
+            ${d.repeatEnd === 'date' ? `<label class="es-date"><span>${mdw(parse(d.repeatUntil || SEM_END))}</span><input type="date" data-es="repeatuntil" value="${d.repeatUntil || SEM_END}" min="${d.day}" aria-label="終わりの日"></label>` : ''}</div>` : ''}`}
         </div>
         <div class="es-sec">
           <div class="es-row">${icon('cal')}${edit
@@ -1368,11 +1380,15 @@
       S.settings.gcal.addCal = d.cid; persist();
       const cal = (S.settings.gcal.read || []).find(c => c.id === d.cid);
       const ev = { title, start, end, allDay: d.allDay, cal: cal ? cal.name : '', cid: d.cid, color: d.color, label: d.label, loc: d.loc, desc: d.desc, ccol: calColor(d.cid) };
+      // くり返し：終わりの日はその日の終わりまで含める
+      const untilDay = d.repeatEnd === 'sem' ? SEM_END : d.repeatEnd === 'date' ? d.repeatUntil : '';
+      const repeat = d.repeat ? { freq: d.repeat, until: untilDay ? atMin(parse(untilDay), 24 * 60 - 1) : null } : null;
+      const repName = d.repeat ? repeatOpts(day).find(([v]) => v === d.repeat)[1] : '';
       closeSheet(true);
-      extOps([{ op: 'xadd', cid: d.cid, title, start, end, allDay: d.allDay, color: d.color, label: d.label, loc: d.loc, desc: d.desc }], () => {
+      extOps([{ op: 'xadd', cid: d.cid, title, start, end, allDay: d.allDay, color: d.color, label: d.label, loc: d.loc, desc: d.desc, repeat }], () => {
         const key = ymd(monday(day));
         if (extCache[key]) extCache[key].events.push(ev);
-      }, `「${title}」を追加しました`);
+      }, `「${title}」を追加しました${repName ? `（${repName}${untilDay ? `、${md(parse(untilDay))}まで` : ''}）` : ''}`);
       return;
     }
     const e = ((extCache[d.key] || {}).events || [])[d.n];
@@ -1457,6 +1473,9 @@
     else if (k === 'start') { if (!t.value) return; [d.a, d.b] = clampDay(toMin(t.value), toMin(t.value) + (d.b - d.a)); }   // 長さはそのまま
     else if (k === 'end') { if (!t.value) return; const e1 = toMin(t.value); d.b = e1 > d.a ? e1 : Math.min(24 * 60 - 5, d.a + 30); }
     else if (k === 'cal') { d.cid = t.value; d.label = ''; d.color = ''; }
+    else if (k === 'repeat') d.repeat = t.value;
+    else if (k === 'repeatend') { d.repeatEnd = t.value; if (t.value === 'date' && !d.repeatUntil) d.repeatUntil = SEM_END < d.day ? d.day : SEM_END; }
+    else if (k === 'repeatuntil') { if (!t.value) return; d.repeatUntil = t.value < d.day ? d.day : t.value; }
     else return;
     drawSheet(); updateDraft(); revealDraft();
   });

@@ -83,7 +83,8 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'xmove', cid, eid, start, newStart, newEnd }   … 予定を動かす（start は元の開始時刻）
 //  { token, op: 'xedit', cid, eid, start, title, loc, desc }   … 予定の名前・場所・メモを変える（送ったものだけ）
 //  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
-//  { token, op: 'xadd',  cid, title, start, end, allDay, color, label, loc, desc } … 予定を追加する
+//  { token, op: 'xadd',  cid, title, start, end, allDay, color, label, loc, desc, repeat } … 予定を追加する
+//      repeat: { freq: 'daily'|'weekly'|'biweekly'|'weekdays'|'monthly'|'yearly', until: ミリ秒（なければずっと） } … くり返しの予定にする
 //  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
 //  { token, op: 'xlabel', cid, eid, start, label }             … 予定に名前つきの色（ラベル）を付ける
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
@@ -110,7 +111,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 7 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 8 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -160,11 +161,23 @@ function doPost(e) {
         const opt = {};
         if (req.loc) opt.location = String(req.loc);
         if (req.desc) opt.description = String(req.desc);
-        const ev = req.allDay
-          ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end), opt)
-          : c.createEvent(title, new Date(req.start), new Date(req.end), opt);
+        const series = !!(req.repeat && req.repeat.freq);
+        let ev;
+        if (series) {
+          const rr = recurrence_(req.repeat, new Date(req.start));
+          ev = req.allDay
+            ? c.createAllDayEventSeries(title, new Date(req.start), rr, opt)
+            : c.createEventSeries(title, new Date(req.start), new Date(req.end), rr, opt);
+        } else {
+          ev = req.allDay
+            ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end), opt)
+            : c.createEvent(title, new Date(req.start), new Date(req.end), opt);
+        }
         if (req.color) ev.setColor(String(req.color));
-        if (req.label) setLabel_(req.cid, ev.getId(), (req.allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(), req.label);
+        if (req.label) {
+          if (series) setSeriesLabel_(req.cid, ev.getId(), req.label);
+          else setLabel_(req.cid, ev.getId(), (req.allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(), req.label);
+        }
         return out_({ ok: true, eid: ev.getId() });
       }
       if (req.op === 'xlabel') {
@@ -253,6 +266,32 @@ function eventLabels_(cid, from, to) {
   return map;
 }
 const allDayStart_ = ymd => { const p = ymd.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+// くり返しのきまり（アプリの選択肢 → Apps Script のきまり）
+function recurrence_(rep, start) {
+  const W = [CalendarApp.Weekday.SUNDAY, CalendarApp.Weekday.MONDAY, CalendarApp.Weekday.TUESDAY, CalendarApp.Weekday.WEDNESDAY,
+    CalendarApp.Weekday.THURSDAY, CalendarApp.Weekday.FRIDAY, CalendarApp.Weekday.SATURDAY];
+  const r = CalendarApp.newRecurrence();
+  let rule;
+  if (rep.freq === 'daily') rule = r.addDailyRule();
+  else if (rep.freq === 'weekly') rule = r.addWeeklyRule().onlyOnWeekday(W[start.getDay()]);
+  else if (rep.freq === 'biweekly') rule = r.addWeeklyRule().interval(2).onlyOnWeekday(W[start.getDay()]);
+  else if (rep.freq === 'weekdays') rule = r.addWeeklyRule().onlyOnWeekdays([W[1], W[2], W[3], W[4], W[5]]);
+  else if (rep.freq === 'monthly') rule = r.addMonthlyRule();
+  else rule = r.addYearlyRule();
+  if (rep.until) rule.until(new Date(Number(rep.until)));
+  return r;
+}
+// くり返しの予定ぜんぶにラベルを付ける（元の予定に付ける）
+function setSeriesLabel_(cid, eid, label) {
+  if (!hasApi_()) return false;
+  try {
+    const it = (Calendar.Events.list(cid, { iCalUID: eid }).items || [])[0];
+    if (!it) return false;
+    Calendar.Events.patch({ eventLabelId: label }, cid, it.id, { eventLabelVersion: 1 });
+    return true;
+  } catch (err) { return false; }
+}
+
 // 予定（くり返しはその回）にラベルを付ける
 function setLabel_(cid, eid, start, label) {
   if (!hasApi_()) return false;
