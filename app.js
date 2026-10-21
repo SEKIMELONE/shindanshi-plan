@@ -908,6 +908,14 @@
     if (!$dlg.open && !drag) render();
   }
 
+  // 予定の色を選ぶ欄（Googleカレンダーの11色）。cur は今の色の番号（カレンダーの色のままなら空）
+  // Apps Script では「カレンダーの色」に戻せないので、その選択肢は今カレンダーの色のときだけ出す
+  const colorPick = (cur, base) => `<div class="field"><span>色</span><div class="swatches" role="radiogroup" aria-label="予定の色">
+    ${cur ? '' : `<label class="sw-opt" title="カレンダーの色のまま"><input type="radio" name="xcol" value="" checked><i style="--c:${base || 'var(--border)'}"></i></label>`}
+    ${GCAL_COLORS.filter(([v]) => GCAL_HEX[v]).map(([v, nm]) => `<label class="sw-opt" title="${nm}"><input type="radio" name="xcol" value="${v}" ${cur === v ? 'checked' : ''}><i style="--c:${GCAL_HEX[v]}"></i></label>`).join('')}
+    </div></div>`;
+  const pickedColor = () => { const r = $form.querySelector('[name=xcol]:checked'); return r ? r.value : ''; };
+
   function openExt(key, n) {
     const e = ((extCache[key] || {}).events || [])[n];
     if (!e) return;
@@ -922,6 +930,7 @@
       ${e.allDay ? '<p class="small muted">終日の予定</p>' : `<div class="row2">
         <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(sMin)}" ${canEdit ? '' : 'disabled'}></label>
         <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(Math.min(24 * 60 - 1, sMin + len))}" ${canEdit ? '' : 'disabled'}></label></div>`}
+      ${canEdit ? colorPick(e.color || '', /^#/.test(e.ccol || '') ? e.ccol : '') : ''}
       ${e.rec ? '<p class="small faint">くり返しの予定です。変更・削除はこの回だけに反映されます。</p>' : ''}
       ${canEdit ? '<p class="small faint">カレンダー上でドラッグしても動かせます。</p>' : '<p class="small warn">編集するには Apps Script を最新にしてください。</p>'}
       <div class="dlg-actions">${canEdit ? '<button class="btn ghost danger" data-dlg="xdel" type="button">削除</button>' : ''}<span class="spacer"></span>
@@ -943,9 +952,12 @@
       }
       const ops = [];
       if (title !== e.title) ops.push({ op: 'xedit', cid: e.cid, eid: e.eid, start: e.start, title });
+      const color = pickedColor();
+      // 「カレンダーの色」に戻すことは Apps Script ではできないので、色を選んだときだけ送る
+      if (color && color !== (e.color || '')) ops.push({ op: 'xcolor', cid: e.cid, eid: e.eid, start: e.start, color });
       if (ns !== e.start || ne !== e.end) ops.push({ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne });
       if (!ops.length) return;
-      extOps(ops, () => { e.title = title; e.start = ns; e.end = ne; }, '変更しました');
+      extOps(ops, () => { e.title = title; e.start = ns; e.end = ne; if (color) e.color = color; }, '変更しました');
     });
   }
 
@@ -965,6 +977,7 @@
         <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(a)}"></label>
         <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(b)}"></label>
       </div>
+      ${colorPick('', '')}
       ${actions(false)}`, act => {
       if (act !== 'save') return;
       const title = fval('xt').trim(), d = parse(fval('xd')), cid = fval('xc'), whole = $form.elements.xa.checked;
@@ -979,9 +992,10 @@
       }
       S.settings.gcal.addCal = cid; persist();
       const cal = cals.find(c => c.id === cid);
-      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole }], () => {
+      const color = pickedColor();
+      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole, color }], () => {
         const key = ymd(monday(d));
-        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid });
+        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid, color });
       }, `「${title}」を追加しました`);
     });
     $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });

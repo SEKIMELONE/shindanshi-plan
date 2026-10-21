@@ -81,7 +81,8 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'xmove', cid, eid, start, newStart, newEnd }   … 予定を動かす（start は元の開始時刻）
 //  { token, op: 'xedit', cid, eid, start, title }              … 予定の名前を変える
 //  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
-//  { token, op: 'xadd',  cid, title, start, end, allDay }      … 予定を追加する
+//  { token, op: 'xadd',  cid, title, start, end, allDay, color } … 予定を追加する
+//  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
 //      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
@@ -106,7 +107,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 4 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 5 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -139,7 +140,7 @@ function doPost(e) {
     return out_({ ok: true, events: events });
   }
 
-  if (/^x(move|edit|del|add)$/.test(req.op || '')) {
+  if (/^x(move|edit|del|add|color)$/.test(req.op || '')) {
     if (req.cid === cal.getId()) return out_({ ok: false, error: '診断士プランのカレンダーはアプリのコマで動かしてください' });
     const c = CalendarApp.getCalendarById(req.cid);
     if (!c) return out_({ ok: false, error: 'カレンダーが見つかりません' });
@@ -149,6 +150,7 @@ function doPost(e) {
         const ev = req.allDay
           ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end))
           : c.createEvent(title, new Date(req.start), new Date(req.end));
+        if (req.color) ev.setColor(String(req.color));
         return out_({ ok: true, eid: ev.getId() });
       }
       const ev = findEvent_(c, req.eid, Number(req.start));
@@ -156,6 +158,8 @@ function doPost(e) {
       if (req.op === 'xmove') {
         if (ev.isAllDayEvent()) ev.setAllDayDates(new Date(req.newStart), new Date(req.newEnd));
         else ev.setTime(new Date(req.newStart), new Date(req.newEnd));
+      } else if (req.op === 'xcolor') {
+        ev.setColor(String(req.color));
       } else if (req.op === 'xedit') {
         ev.setTitle(String(req.title || '').trim() || '予定');
       } else {
