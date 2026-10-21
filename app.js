@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v50';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v51';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1161,7 +1161,8 @@
       render(); return;
     }
     const el = $view.querySelector('.ev.draft');
-    if (!el || el.dataset.day !== d.day || el.dataset.ad !== (d.allDay ? '1' : '0')) { render(); return; }
+    // 日や終日が変わって下書きが別の段に移ったら描き直し、画面の外に出ていたら見える所までスクロールする（吹き出しの矢印が指せるように）
+    if (!el || el.dataset.day !== d.day || el.dataset.ad !== (d.allDay ? '1' : '0')) { render(); showDraft(); placeSheet(); return; }
     const tmp = document.createElement('div');
     tmp.innerHTML = draftHtml(d, ui.day ? 'day' : 'week');
     const n = tmp.firstElementChild;
@@ -1229,6 +1230,8 @@
     const head = Math.max(60, (document.querySelector('.cal-sticky, .daystrip')?.getBoundingClientRect().bottom || 60));
     const vh = window.visualViewport ? visualViewport.height : innerHeight;
     if (r.top < head + 8 || r.top > vh - 160) scrollBy(0, r.top - head - Math.min(120, vh * 0.15));
+    else return;
+    placeSheet();
   }
   // 下書きが、シートに隠れない位置に来るようにスクロールする
   function revealDraft() {
@@ -1387,7 +1390,7 @@
     if (k === 'allday') {   // つまみが動き終わってから描き直す（すぐ描き直すと動きが見えない）
       d.allDay = t.checked; t.setAttribute('aria-checked', String(t.checked));
       updateDraft();
-      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); } }, 300);
+      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); showDraft(); placeSheet(); } }, 300);
       return;
     }
     if (k === 'date') { if (!t.value) return; d.day = t.value; }
