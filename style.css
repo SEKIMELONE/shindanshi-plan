@@ -514,17 +514,14 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 .fab:active { transform: scale(.96); }
 @media (min-width: 900px) { .fab { right: max(28px, calc(50% - 560px)); } }
 body.sheet-open .fab { display: none; }
-body.sheet-open main { padding-bottom: 62vh; }
 
-.evsheet { position: fixed; inset: auto 0 var(--kb, 0px) 0; margin: 0 auto; width: min(600px, 100%); max-height: min(60dvh, calc(var(--vvh, 100dvh) - 56px)); overflow: auto; overscroll-behavior: contain;
-  border: 0; padding: 0 0 calc(10px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: var(--surface); color: var(--text); z-index: 30;
-  box-shadow: 0 -10px 36px rgba(0,0,0,.22); animation: sheet-up .2s ease-out; transition: transform .15s; }
-@media (min-width: 900px) { .evsheet { inset: auto 28px calc(28px + var(--kb, 0px)) auto; margin: 0; width: 420px; border-radius: 20px; padding-bottom: 12px; } }
-@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
-.es-grab { display: flex; justify-content: center; padding: 8px 0 2px; cursor: grab; touch-action: none; }
-.es-grab i { width: 36px; height: 4px; border-radius: 99px; background: var(--border); }
-.es-top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px 6px; background: var(--surface); }
-.es-h { flex: 1; font-size: 13px; font-weight: 700; color: var(--muted); touch-action: none; }
+.evsheet { position: fixed; inset: 0; margin: auto; width: min(480px, calc(100vw - 24px)); height: fit-content; max-height: calc(var(--vvh, 100dvh) - 40px); overflow: auto; overscroll-behavior: contain;
+  border: 0; padding: 4px 0 14px; border-radius: 20px; background: var(--surface); color: var(--text);
+  box-shadow: 0 20px 60px rgba(0,0,0,.28); animation: sheet-in .16s ease-out; }
+.evsheet::backdrop { background: rgba(10, 12, 16, .35); }
+@keyframes sheet-in { from { transform: scale(.97); opacity: 0; } }
+.es-top { position: sticky; top: -4px; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px 6px; background: var(--surface); }
+.es-h { flex: 1; font-size: 13px; font-weight: 700; color: var(--muted); }
 .es-top .icon-btn svg, .es-ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .es-top .btn.primary { border-radius: 999px; padding: 8px 20px; }
 .es-body { display: flex; flex-direction: column; padding: 0 16px; }

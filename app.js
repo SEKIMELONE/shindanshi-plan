@@ -177,7 +177,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v33';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v34';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -992,9 +992,8 @@
     });
   }
 
-  // ---------- 予定を入れる・直すシート（Googleカレンダーのように、画面の下から出す） ----------
-  // カレンダーの上には「下書き」のブロックを出し、時間や色を変えるとその場で動く。
-  // シートを開いたままカレンダーの空いているところをタップすると、下書きがそこへ動く
+  // ---------- 予定を入れる・直す画面（真ん中に出すポップアップ） ----------
+  // 後ろのカレンダーには「下書き」のブロックを出し、時間や色を変えるとその場で動く
   const $sheet = document.createElement('dialog');
   $sheet.className = 'evsheet';
   $sheet.setAttribute('aria-label', '予定');
@@ -1096,8 +1095,7 @@
     const sug = edit ? [] : suggestions(d.title || '');
     const warn = overlaps(d);
     const len = d.b - d.a;
-    return `<div class="es-grab" data-es="grab"><i></i></div>
-      <div class="es-top">
+    return `<div class="es-top">
         <button type="button" class="icon-btn" data-es="close" aria-label="閉じる">${icon('close')}</button>
         <span class="es-h">${edit ? '予定を編集' : '予定を追加'}</span>
         <button type="button" class="btn primary" data-es="save">保存</button>
@@ -1164,6 +1162,7 @@
   }
   // 下書きが、シートに隠れない位置に来るようにスクロールする
   function revealDraft() {
+    return;   // 真ん中のポップアップにしたので、スクロールで避けなくてよい
     requestAnimationFrame(() => {
       const el = $view.querySelector('.ev.draft');
       if (!el || !sheetOpen()) return;
@@ -1179,9 +1178,8 @@
     ui.draft = d;
     document.body.classList.add('sheet-open');
     drawSheet();
-    if (!sheetOpen()) $sheet.show();
+    if (!sheetOpen()) $sheet.showModal();
     render();
-    revealDraft();
     if (matchMedia('(pointer: fine)').matches && d.mode === 'add') $sheet.querySelector('.es-title')?.focus();
   }
   function closeSheet(force) {
@@ -1327,20 +1325,7 @@
     if (ev.key === 'Enter' && ev.target.classList.contains('es-title') && !ev.isComposing) { ev.preventDefault(); ev.target.blur(); }
   });
   $sheet.addEventListener('cancel', ev => { ev.preventDefault(); closeSheet(); });
-  // つまみを下へ引っぱると閉じる
-  let grab = null;
-  $sheet.addEventListener('pointerdown', ev => { if (ev.target.closest('.es-grab, .es-h')) grab = { y: ev.clientY, id: ev.pointerId }; });
-  addEventListener('pointermove', ev => {
-    if (!grab || ev.pointerId !== grab.id) return;
-    const dy = Math.max(0, ev.clientY - grab.y);
-    $sheet.style.transform = `translateY(${dy}px)`;
-  });
-  addEventListener('pointerup', ev => {
-    if (!grab || ev.pointerId !== grab.id) return;
-    const dy = ev.clientY - grab.y;
-    grab = null; $sheet.style.transform = '';
-    if (dy > 90) closeSheet();
-  });
+  $sheet.addEventListener('click', ev => { if (ev.target === $sheet) closeSheet(); });   // 外側をタップしたら閉じる
   // キーボードが出たら、その上にシートを持ち上げる
   if (window.visualViewport) {
     const vv = window.visualViewport;
