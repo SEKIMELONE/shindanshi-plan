@@ -606,3 +606,10 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .ev .rz.up::after { top: 4px; bottom: auto; }
 .evsheet.glide, .es-pointer.glide { transition: top .24s cubic-bezier(.2, .8, .2, 1), left .24s cubic-bezier(.2, .8, .2, 1), max-height .24s cubic-bezier(.2, .8, .2, 1); }
 @media (prefers-reduced-motion: reduce) { .evsheet.glide, .es-pointer.glide { transition: none; } }
+/* 終日にしたとき：時刻の欄は消え、長さボタンと重なりの表示は下からなめらかにたたむ */
+.es-times { transition: opacity .2s; }
+.evsheet.is-allday .es-times { opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
+.es-col { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .3s cubic-bezier(.2, .8, .2, 1), opacity .25s; }
+.es-col-in { overflow: hidden; min-height: 0; }
+.evsheet.is-allday .es-col { grid-template-rows: 0fr; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .es-col, .es-times { transition: none; } }

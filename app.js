@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v53';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v54';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1115,10 +1115,12 @@
           <div class="es-row es-when">
             <span class="es-ic-sp"></span>
             <label class="es-date"><span>${mdw(day)}</span><input type="date" data-es="date" value="${d.day}" aria-label="日付"></label>
-            ${d.allDay ? '' : `<span class="es-times"><input type="time" step="300" data-es="start" value="${hhmm(d.a)}" aria-label="開始"><span class="es-arrow">→</span><input type="time" step="300" data-es="end" value="${hhmm(d.b)}" aria-label="終了"></span>`}
+            <span class="es-times"><input type="time" step="300" data-es="start" value="${hhmm(d.a)}" aria-label="開始"><span class="es-arrow">→</span><input type="time" step="300" data-es="end" value="${hhmm(d.b)}" aria-label="終了"></span>
           </div>
-          ${d.allDay ? '' : `<div class="es-row es-durs"><span class="es-ic-sp"></span><div class="es-chips">${DUR_CHIPS.map(([m, t]) => `<button type="button" class="es-chip${len === m ? ' on' : ''}" data-es="dur" data-v="${m}">${t}</button>`).join('')}</div></div>`}
-          ${warn.length ? `<div class="es-row es-warn">${icon('warn')}<span>${esc(warn.slice(0, 2).join('、'))}${warn.length > 2 ? ` ほか${warn.length - 2}件` : ''}と重なっています</span></div>` : ''}
+          <div class="es-col"><div class="es-col-in">
+            <div class="es-row es-durs"><span class="es-ic-sp"></span><div class="es-chips">${DUR_CHIPS.map(([m, t]) => `<button type="button" class="es-chip${len === m ? ' on' : ''}" data-es="dur" data-v="${m}">${t}</button>`).join('')}</div></div>
+            ${warn.length ? `<div class="es-row es-warn">${icon('warn')}<span>${esc(warn.slice(0, 2).join('、'))}${warn.length > 2 ? ` ほか${warn.length - 2}件` : ''}と重なっています</span></div>` : ''}
+          </div></div>
         </div>
         <div class="es-sec">
           <div class="es-row">${icon('cal')}${edit
@@ -1137,6 +1139,7 @@
   function drawSheet() {
     const scroll = $sheet.scrollTop;
     $sheet.innerHTML = sheetHtml();
+    $sheet.classList.toggle('is-allday', !!(ui.draft && ui.draft.allDay));   // 終日なら時刻の欄・長さボタンをたたむ
     $sheet.scrollTop = scroll;
     placeSoon(true);
   }
@@ -1182,6 +1185,20 @@
   }
 
   // 吹き出しを、下書き（予定）のとなりに置く。横に入らなければ上か下。矢印で予定を指す
+  // たたんでいる間（と描き直したあと）、スイッチが同じ高さにいるよう吹き出しの位置を少しずつ直す
+  let keepTimer = 0;
+  function keepSwitch(y0) {
+    clearTimeout(keepTimer);
+    let n = 0;
+    const tick = () => {
+      const el = $sheet.querySelector('.es-switch'), d = ui.draft;
+      if (!el || !d || !d.pin || !sheetOpen()) return;
+      const dy = y0 - el.getBoundingClientRect().top;
+      if (Math.abs(dy) > 0.5) { d.pin.top += dy; placeSheet(); }
+      if (++n < 40) keepTimer = setTimeout(tick, 16);
+    };
+    tick();
+  }
   function placeSheet(glide) {
     if (!sheetOpen()) { $arrow.hidden = true; return; }
     // 中身が変わって位置が変わるときはすべらせて動かす。スクロールについていくときはそのまま
@@ -1197,6 +1214,21 @@
       $arrow.hidden = true; return;
     }
     const r = anchor.getBoundingClientRect();
+    const pin = ui.draft && ui.draft.pin;
+    if (pin) {   // 位置を止めてあるときは動かさず、矢印だけ、予定に向けられる辺に出す
+      const left = Math.max(8, Math.min(vw - W - 8, pin.left)), top = Math.max(topLim - 200, Math.min(botLim - 160, pin.top));
+      const h = Math.min(H, botLim - top), bottom = top + Math.min(H, h);
+      Object.assign($sheet.style, { left: `${left}px`, top: `${top}px`, maxHeight: `${h}px` });
+      const cx = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)), cy = Math.max(top + 20, Math.min(bottom - 20, r.top + Math.min(r.height, 32) / 2));
+      let sd = '', ax = 0, ay = 0;
+      if (r.bottom <= top && r.right > left && r.left < left + W) { sd = 'below'; ax = cx; ay = top; }
+      else if (r.top >= bottom && r.right > left && r.left < left + W) { sd = 'above'; ax = cx; ay = bottom; }
+      else if (r.right <= left) { sd = 'right'; ax = left; ay = cy; }
+      else if (r.left >= left + W) { sd = 'left'; ax = left + W; ay = cy; }
+      $arrow.hidden = !sd || r.bottom < 0 || r.top > vh;
+      if (sd) { $sheet.dataset.side = sd; $arrow.dataset.side = sd; $arrow.style.left = `${ax}px`; $arrow.style.top = `${ay}px`; }
+      return;
+    }
     let side;
     if (vw - r.right - gap >= W + 8) side = 'right';
     else if (r.left - gap >= W + 8) side = 'left';
@@ -1299,6 +1331,7 @@
     // シートを開いたまま別の場所をタップしたら、長さはそのままで下書きを動かす
     if (sheetOpen() && ui.draft && ui.draft.mode === 'add') {
       const d = ui.draft, len = d.b - d.a;
+      delete d.pin;   // 別の場所に動かしたら、吹き出しもそこへついていく
       d.day = ymd(day); d.allDay = !!allDay;
       if (!allDay) [d.a, d.b] = clampDay(a, a + (b != null ? b - a : len));
       drawSheet(); updateDraft(); revealDraft();
@@ -1407,10 +1440,17 @@
   $sheet.addEventListener('change', ev => {
     const t = ev.target, d = ui.draft, k = t.dataset.es;
     if (!d || !k) return;
-    if (k === 'allday') {   // つまみが動き終わってから描き直す（すぐ描き直すと動きが見えない）
+    if (k === 'allday') {
+      // 吹き出しの上端をその場に止め（スイッチが指から離れないように）、時刻の欄・長さボタンを下からなめらかにたたむ
+      d.pin = d.pin || { top: parseFloat($sheet.style.top) || 8, left: parseFloat($sheet.style.left) || 8 };   // 置いた位置（出てくる動きの途中の見た目ではなく）
+      const sw0 = $sheet.querySelector('.es-switch').getBoundingClientRect().top;
       d.allDay = t.checked; t.setAttribute('aria-checked', String(t.checked));
+      $sheet.classList.toggle('is-allday', d.allDay);
+      keepSwitch(sw0);
+      const sm = $sheet.querySelector('.es-lbl small');
+      if (sm) sm.textContent = d.allDay ? '時間を決めない予定' : '時間を決めて入れる';
       updateDraft();
-      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); } }, 300);
+      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); } }, 320);   // つまみ・たたむ動きが終わってから描き直す
       return;
     }
     if (k === 'date') { if (!t.value) return; d.day = t.value; }
@@ -1452,6 +1492,7 @@
     if (sheetOpen() && ui.draft && ui.draft.mode !== 'add' && !closeSheet()) { mk = null; return; }
     const day = ui.calDays[mk.col];
     if (sheetOpen() && ui.draft) {
+      delete ui.draft.pin;
       Object.assign(ui.draft, { day: ymd(day), allDay: false, a: mk.a0, b: mk.a0 + 30 });
       updateDraft();
     } else {
