@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v44';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v45';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1167,7 +1167,17 @@
     const n = tmp.firstElementChild;
     el.style.cssText = n.style.cssText;
     el.innerHTML = n.innerHTML;
+    syncTimes();
     placeSheet();
+  }
+  // 吹き出しの時刻の欄と長さのボタンを、下書きに合わせる（引っぱっている間もその場で変わる）
+  function syncTimes() {
+    const d = ui.draft;
+    if (!d || !sheetOpen() || d.allDay) return;
+    const st = $sheet.querySelector('[data-es=start]'), en = $sheet.querySelector('[data-es=end]');
+    if (st && document.activeElement !== st) st.value = hhmm(d.a);
+    if (en && document.activeElement !== en) en.value = hhmm(d.b);
+    $sheet.querySelectorAll('[data-es=dur]').forEach(c => c.classList.toggle('on', +c.dataset.v === d.b - d.a));
   }
 
   // 吹き出しを、下書き（予定）のとなりに置く。横に入らなければ上か下。矢印で予定を指す
