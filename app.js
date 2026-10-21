@@ -843,7 +843,7 @@
     gcalPost({ op: 'read', ids: S.settings.gcal.read.map(x => x.id), from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0) })
       .then(j => {
         const before = c && c.sel === sel ? JSON.stringify(c.events) : '';
-        extCache[key] = { at: Date.now(), sel, events: j.events || [] };
+        extCache[key] = { at: Date.now(), sel, events: j.events || [], labels: j.labels || {} };
         // 取っておくのは6週分まで。読んだのが古い週から捨てる（今読んだ週は捨てない）
         const old = Object.keys(extCache).filter(k => k !== key).sort((p, q) => extCache[p].at - extCache[q].at);
         while (old.length > 5) delete extCache[old.shift()];
@@ -879,7 +879,18 @@
 
   // Googleカレンダーの予定の色（番号 → 色）。番号がなければカレンダーの色
   const GCAL_HEX = { 1: '#7986cb', 2: '#33b679', 3: '#8e24aa', 4: '#e67c73', 5: '#f6bf26', 6: '#f4511e', 7: '#039be5', 8: '#616161', 9: '#3f51b5', 10: '#0b8043', 11: '#d50000' };
-  const extColor = e => GCAL_HEX[e.color] || (/^#[0-9a-f]{6}$/i.test(e.ccol || '') ? e.ccol : '');
+  // カレンダーに決めてある色の名前（ラベル）。いちばん新しく読んだ週のものを使う
+  const labelsOf = cid => {
+    let best = null;
+    Object.values(extCache).forEach(c => { if (c.labels && c.labels[cid] && (!best || c.at > best.at)) best = c; });
+    return best ? best.labels[cid] : [];
+  };
+  const labelOf = e => (e.label && labelsOf(e.cid).find(l => l.id === e.label)) || null;
+  const extColor = e => {
+    const l = labelOf(e);
+    if (l && /^#[0-9a-f]{6}$/i.test(l.color)) return l.color;
+    return GCAL_HEX[e.color] || (/^#[0-9a-f]{6}$/i.test(e.ccol || '') ? e.ccol : '');
+  };
   function extHtml(x, style, mode) {
     const col = extColor(x.e);
     if (col) style = `${style};--c:${col}`;
@@ -915,6 +926,18 @@
     ${GCAL_COLORS.filter(([v]) => GCAL_HEX[v]).map(([v, nm]) => `<label class="sw-opt" title="${nm}"><input type="radio" name="xcol" value="${v}" ${cur === v ? 'checked' : ''}><i style="--c:${GCAL_HEX[v]}"></i></label>`).join('')}
     </div></div>`;
   const pickedColor = () => { const r = $form.querySelector('[name=xcol]:checked'); return r ? r.value : ''; };
+  // 色に名前を付けてあるカレンダーは、名前つきの色から選ぶ（名前のある色を先に、ない色は丸だけ）
+  const labelPick = (cid, cur) => {
+    const ls = labelsOf(cid);
+    if (!ls.length) return '';
+    const named = ls.filter(l => l.name), plain = ls.filter(l => !l.name);
+    const opt = l => `<label class="${l.name ? 'lb-opt' : 'sw-opt'}" title="${esc(l.name || l.color)}"><input type="radio" name="xlab" value="${esc(l.id)}" ${cur === l.id ? 'checked' : ''}><i style="--c:${esc(l.color)}"></i>${l.name ? `<span>${esc(l.name)}</span>` : ''}</label>`;
+    return `<div class="field"><span>色</span>
+      ${named.length ? `<div class="labels" role="radiogroup" aria-label="名前つきの色">${named.map(opt).join('')}</div>` : ''}
+      <div class="swatches" role="radiogroup" aria-label="ほかの色">${plain.map(opt).join('')}</div></div>`;
+  };
+  const pickedLabel = () => { const r = $form.querySelector('[name=xlab]:checked'); return r ? r.value : ''; };
+  const pickFor = (cid, e) => labelsOf(cid).length ? labelPick(cid, e ? e.label || '' : '') : colorPick(e ? e.color || '' : '', e && /^#/.test(e.ccol || '') ? e.ccol : '');
 
   function openExt(key, n) {
     const e = ((extCache[key] || {}).events || [])[n];
@@ -930,7 +953,7 @@
       ${e.allDay ? '<p class="small muted">終日の予定</p>' : `<div class="row2">
         <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(sMin)}" ${canEdit ? '' : 'disabled'}></label>
         <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(Math.min(24 * 60 - 1, sMin + len))}" ${canEdit ? '' : 'disabled'}></label></div>`}
-      ${canEdit ? colorPick(e.color || '', /^#/.test(e.ccol || '') ? e.ccol : '') : ''}
+      ${canEdit ? pickFor(e.cid, e) : ''}
       ${e.rec ? '<p class="small faint">くり返しの予定です。変更・削除はこの回だけに反映されます。</p>' : ''}
       ${canEdit ? '<p class="small faint">カレンダー上でドラッグしても動かせます。</p>' : '<p class="small warn">編集するには Apps Script を最新にしてください。</p>'}
       <div class="dlg-actions">${canEdit ? '<button class="btn ghost danger" data-dlg="xdel" type="button">削除</button>' : ''}<span class="spacer"></span>
@@ -952,12 +975,13 @@
       }
       const ops = [];
       if (title !== e.title) ops.push({ op: 'xedit', cid: e.cid, eid: e.eid, start: e.start, title });
-      const color = pickedColor();
+      const color = pickedColor(), label = pickedLabel();
       // 「カレンダーの色」に戻すことは Apps Script ではできないので、色を選んだときだけ送る
-      if (color && color !== (e.color || '')) ops.push({ op: 'xcolor', cid: e.cid, eid: e.eid, start: e.start, color });
+      if (label && label !== (e.label || '')) ops.push({ op: 'xlabel', cid: e.cid, eid: e.eid, start: e.start, label });
+      else if (color && color !== (e.color || '')) ops.push({ op: 'xcolor', cid: e.cid, eid: e.eid, start: e.start, color });
       if (ns !== e.start || ne !== e.end) ops.push({ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne });
       if (!ops.length) return;
-      extOps(ops, () => { e.title = title; e.start = ns; e.end = ne; if (color) e.color = color; }, '変更しました');
+      extOps(ops, () => { e.title = title; e.start = ns; e.end = ne; if (label) e.label = label; else if (color) e.color = color; }, '変更しました');
     });
   }
 
@@ -977,7 +1001,7 @@
         <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(a)}"></label>
         <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(b)}"></label>
       </div>
-      ${colorPick('', '')}
+      <div id="xpick">${pickFor(pick.id, null)}</div>
       ${actions(false)}`, act => {
       if (act !== 'save') return;
       const title = fval('xt').trim(), d = parse(fval('xd')), cid = fval('xc'), whole = $form.elements.xa.checked;
@@ -992,13 +1016,14 @@
       }
       S.settings.gcal.addCal = cid; persist();
       const cal = cals.find(c => c.id === cid);
-      const color = pickedColor();
-      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole, color }], () => {
+      const color = pickedColor(), label = pickedLabel();
+      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole, color, label }], () => {
         const key = ymd(monday(d));
-        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid, color });
+        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid, color, label });
       }, `「${title}」を追加しました`);
     });
     $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });
+    $form.elements.xc.addEventListener('change', ev => { $form.querySelector('#xpick').innerHTML = pickFor(ev.target.value, null); });
   }
 
   // ---------- コマが終わったら、音なしで目立たせる（画面全体のお知らせ・振動・タブ名の点滅） ----------

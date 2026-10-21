@@ -18,6 +18,8 @@
  *     表示された「ウェブアプリのURL」を控える
  *  4. アプリの「設定 → Googleカレンダー連携」に URL と合言葉を入れて「接続テスト」
  *
+ * 色の名前（ラベル）を使うときは、左の「サービス」＋ から「Google Calendar API」を追加する（なくても動く）
+ *
  * このスクリプトを書き換えたときは「デプロイを管理」→ 編集 →「新しいバージョン」で更新する（URLは変わらない）
  */
 
@@ -83,6 +85,7 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
 //  { token, op: 'xadd',  cid, title, start, end, allDay, color } … 予定を追加する
 //  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
+//  { token, op: 'xlabel', cid, eid, start, label }             … 予定に名前つきの色（ラベル）を付ける
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
 //      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
@@ -107,7 +110,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 5 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 6 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -116,16 +119,20 @@ function doPost(e) {
     return out_({ ok: true, cals: cals });
   }
   if (req.op === 'read') {
-    const from = new Date(req.from), to = new Date(req.to), events = [];
+    const from = new Date(req.from), to = new Date(req.to), events = [], labels = {};
     (req.ids || []).forEach(id => {
       if (id === cal.getId()) return;
       const c = CalendarApp.getCalendarById(id);
       if (!c) return;
+      const ls = labels_(id);
+      if (ls.length) labels[id] = ls;
+      const lmap = ls.length ? eventLabels_(id, from, to) : {};
       c.getEvents(from, to).forEach(ev => {
         const allDay = ev.isAllDayEvent();
+        const start = (allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime();
         events.push({
           title: ev.getTitle() || '予定あり',
-          start: (allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(),
+          start: start,
           end: (allDay ? ev.getAllDayEndDate() : ev.getEndTime()).getTime(),
           allDay: allDay,
           cal: c.getName(),
@@ -134,13 +141,14 @@ function doPost(e) {
           rec: ev.isRecurringEvent(),
           color: ev.getColor() || '',   // 予定ごとの色（'1'〜'11'）。カレンダーの色のままなら空
           ccol: c.getColor(),           // カレンダーの色（#rrggbb）
+          label: lmap[ev.getId() + '|' + start] || '',   // 名前つきの色（ラベル）の id
         });
       });
     });
-    return out_({ ok: true, events: events });
+    return out_({ ok: true, events: events, labels: labels });
   }
 
-  if (/^x(move|edit|del|add|color)$/.test(req.op || '')) {
+  if (/^x(move|edit|del|add|color|label)$/.test(req.op || '')) {
     if (req.cid === cal.getId()) return out_({ ok: false, error: '診断士プランのカレンダーはアプリのコマで動かしてください' });
     const c = CalendarApp.getCalendarById(req.cid);
     if (!c) return out_({ ok: false, error: 'カレンダーが見つかりません' });
@@ -151,7 +159,12 @@ function doPost(e) {
           ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end))
           : c.createEvent(title, new Date(req.start), new Date(req.end));
         if (req.color) ev.setColor(String(req.color));
+        if (req.label) setLabel_(req.cid, ev.getId(), (req.allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(), req.label);
         return out_({ ok: true, eid: ev.getId() });
+      }
+      if (req.op === 'xlabel') {
+        if (!setLabel_(req.cid, req.eid, Number(req.start), req.label)) return out_({ ok: false, error: '色の名前を付けられませんでした（スクリプトに「Google Calendar API」のサービスを追加してください）' });
+        return out_({ ok: true });
       }
       const ev = findEvent_(c, req.eid, Number(req.start));
       if (!ev) return out_({ ok: false, error: '予定が見つかりません（Googleカレンダー側で変わったかもしれません）' });
@@ -203,6 +216,46 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------- 色の名前（ラベル）：Google Calendar API のサービスを追加したときだけ使える ----------
+const hasApi_ = () => typeof Calendar !== 'undefined';
+// カレンダーに決めてある色の名前 [{ id, name, color }]
+function labels_(cid) {
+  if (!hasApi_()) return [];
+  try {
+    const lp = Calendar.Calendars.get(cid).labelProperties;
+    return ((lp && lp.eventLabels) || []).map(l => ({ id: l.id, name: l.name || '', color: l.backgroundColor || '' }));
+  } catch (err) { return []; }
+}
+// 期間内の予定のラベル { 'iCalUID|開始ms': ラベルid }
+function eventLabels_(cid, from, to) {
+  const map = {};
+  try {
+    let token;
+    do {
+      const r = Calendar.Events.list(cid, { timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true, maxResults: 2500, pageToken: token, eventLabelVersion: 1 });
+      (r.items || []).forEach(it => {
+        if (!it.eventLabelId || !it.start) return;
+        const st = it.start.dateTime ? new Date(it.start.dateTime) : allDayStart_(it.start.date);
+        map[it.iCalUID + '|' + st.getTime()] = it.eventLabelId;
+      });
+      token = r.nextPageToken;
+    } while (token);
+  } catch (err) { /* 読めなければラベルなし */ }
+  return map;
+}
+const allDayStart_ = ymd => { const p = ymd.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+// 予定（くり返しはその回）にラベルを付ける
+function setLabel_(cid, eid, start, label) {
+  if (!hasApi_()) return false;
+  try {
+    const r = Calendar.Events.list(cid, { iCalUID: eid, timeMin: new Date(start - 86400000).toISOString(), timeMax: new Date(start + 86400000).toISOString(), singleEvents: true });
+    const it = (r.items || []).find(x => (x.start.dateTime ? new Date(x.start.dateTime) : allDayStart_(x.start.date)).getTime() === start);
+    if (!it) return false;
+    Calendar.Events.patch({ eventLabelId: label }, cid, it.id, { eventLabelVersion: 1 });
+    return true;
+  } catch (err) { return false; }
 }
 
 // 予定を探す。くり返し予定は同じIDが並ぶので、開始時刻でその回を選ぶ
