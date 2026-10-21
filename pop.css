@@ -87,7 +87,14 @@
 [data-design="pop"] .btn:not(.ghost):active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
 [data-design="pop"] .btn.primary:active { background: var(--accent); }
 [data-design="pop"] .btn[disabled] { box-shadow: none; }
-/* マウスを乗せたときは動かさない。押したときだけ沈んで、離すとバネで戻る */
+/* マウスを乗せたら、弾まずにすっと浮く。押すと沈んで、離すとバネで戻る */
+@media (hover: hover) {
+  [data-design="pop"] .btn:not(.ghost):not([disabled]):hover, [data-design="pop"] .chip:hover, [data-design="pop"] .es-chip:hover {
+    transform: translate(-1px, -2px); box-shadow: 4px 5px 0 var(--ink); transition: transform .18s ease-out, box-shadow .18s ease-out; }
+  [data-design="pop"] .es-chip:not(.on):hover { box-shadow: 2px 3px 0 var(--ink); }
+  [data-design="pop"] .pill:hover { transform: translateY(-2px); transition: transform .18s ease-out; }
+  [data-design="pop"] .fab:hover { transform: translate(-1px, -3px); box-shadow: 6px 7px 0 var(--ink); transition: transform .18s ease-out, box-shadow .18s ease-out; }
+}
 [data-design="pop"] .pill { border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); font-weight: 700; }
 [data-design="pop"] .pill.accent { background: var(--sun); color: #1d1b3a; }
 [data-design="pop"] .pill.now { background: var(--orange); color: #1d1b3a; }
