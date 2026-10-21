@@ -94,6 +94,8 @@
   [data-design="pop"] .es-chip:not(.on):hover { box-shadow: 2px 3px 0 var(--ink); }
   [data-design="pop"] .pill:hover { transform: translateY(-2px); transition: transform .18s ease-out; }
   [data-design="pop"] .fab:hover { transform: translate(-1px, -3px); box-shadow: 6px 7px 0 var(--ink); transition: transform .18s ease-out, box-shadow .18s ease-out; }
+  [data-design="pop"] .btn:not(.ghost):not([disabled]):hover:active, [data-design="pop"] .chip:hover:active, [data-design="pop"] .es-chip:hover:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); transition-duration: .08s; }
+  [data-design="pop"] .fab:hover:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
 }
 [data-design="pop"] .pill { border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); font-weight: 700; }
 [data-design="pop"] .pill.accent { background: var(--sun); color: #1d1b3a; }
