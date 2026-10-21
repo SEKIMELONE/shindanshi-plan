@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v56';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v57';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1221,6 +1221,7 @@
     };
     tick();
   }
+  const EDGE = 36;   // 吹き出しの角（丸み20px）から矢印までの最小の距離
   function placeSheet(glide) {
     if (!sheetOpen()) { $arrow.hidden = true; return; }
     // 中身が変わって位置が変わるときはすべらせて動かす。スクロールについていくときはそのまま
@@ -1243,7 +1244,7 @@
       const left = Math.max(8, Math.min(vw - W - 8, pin.left)), top = Math.max(topLim - 200, Math.min(botLim - 160, pin.top));
       const h = Math.min(H, botLim - top), bottom = top + Math.min(H, h);
       fit(left, top, h);
-      const cx = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)), cy = Math.max(top + 20, Math.min(bottom - 20, r.top + Math.min(r.height, 32) / 2));
+      const cx = Math.max(left + EDGE, Math.min(left + W - EDGE, r.left + r.width / 2)), cy = Math.max(top + EDGE, Math.min(bottom - EDGE, r.top + Math.min(r.height, 32) / 2));
       let sd = '', ax = 0, ay = 0;
       if (r.bottom <= top && r.right > left && r.left < left + W) { sd = 'below'; ax = cx; ay = top; }
       else if (r.top >= bottom && r.right > left && r.left < left + W) { sd = 'above'; ax = cx; ay = bottom; }
@@ -1261,14 +1262,15 @@
     if (side === 'right' || side === 'left') {
       h = Math.min(H, botLim - topLim);
       left = side === 'right' ? r.right + gap : r.left - gap - W;
-      top = Math.max(topLim, Math.min(botLim - h, r.top - 24));
-      ay = Math.max(r.top, Math.min(r.bottom, r.top + 16)); ax = side === 'right' ? left : left + W;
+      top = Math.max(topLim, Math.min(botLim - h, r.top - EDGE + 8));
+      // 矢印は角の丸みにかからない所に置く（吹き出しの外に浮かないように、吹き出しの上下の範囲に収める）
+      ay = Math.max(top + EDGE, Math.min(top + h - EDGE, Math.max(r.top, Math.min(r.bottom, r.top + 16)))); ax = side === 'right' ? left : left + W;
     } else {
       h = Math.min(H, side === 'below' ? botLim - r.bottom - gap : r.top - gap - topLim);
       h = Math.max(h, 160);
       left = Math.max(8, Math.min(vw - W - 8, r.left + r.width / 2 - W / 2));
       top = side === 'below' ? Math.min(r.bottom + gap, botLim - h) : Math.max(topLim, r.top - gap - h);
-      ax = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)); ay = side === 'below' ? top : top + h;
+      ax = Math.max(left + EDGE, Math.min(left + W - EDGE, r.left + r.width / 2)); ay = side === 'below' ? top : top + h;
     }
     fit(left, top, h);
     setArrow(side, ax, ay, left, top);
