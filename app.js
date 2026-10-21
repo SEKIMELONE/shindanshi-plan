@@ -837,7 +837,7 @@
     if (!extOn()) return;   // 読むだけなので、記録の読み込みを待たなくてよい
     const key = ymd(days[0]), c = extCache[key];
     const sel = S.settings.gcal.read.map(x => x.id).join(',');
-    if (c && c.sel === sel && Date.now() - c.at < 5 * 60000) return;
+    if (c && c.sel === sel && c.labels && Date.now() - c.at < 5 * 60000) return;   // 色の名前を持っていない古い分はすぐ読み直す
     if (extBusy.has(key) || !navigator.onLine) return;
     extBusy.add(key); extLoadShow();
     gcalPost({ op: 'read', ids: S.settings.gcal.read.map(x => x.id), from: atMin(days[0], 0), to: atMin(addDays(days[6], 1), 0) })
