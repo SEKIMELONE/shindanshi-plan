@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v48';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v50';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1110,7 +1110,8 @@
         <input class="es-title" name="es-title" placeholder="タイトルを追加" value="${esc(d.title || '')}" autocomplete="off" enterkeyhint="done">
         <div class="es-sugg" ${sug.length ? '' : 'hidden'}>${sug.map((s, i) => `<button type="button" class="es-chip sugg" data-es="sugg" data-i="${i}" style="--c:${esc(draftColor(s))}"><i></i>${esc(s.title)}</button>`).join('')}</div>
         <div class="es-sec">
-          <div class="es-row">${icon('clock')}<span class="es-lbl">終日</span><label class="es-switch"><input type="checkbox" data-es="allday" ${d.allDay ? 'checked' : ''}><i></i></label></div>
+          <label class="es-row es-allday">${icon('clock')}<span class="es-lbl">終日<small>${d.allDay ? '時間を決めない予定' : '時間を決めて入れる'}</small></span>
+            <span class="es-switch"><input type="checkbox" role="switch" aria-checked="${d.allDay}" aria-label="終日" data-es="allday" ${d.allDay ? 'checked' : ''}><span class="trk"><span class="knob"></span></span></span></label>
           <div class="es-row es-when">
             <span class="es-ic-sp"></span>
             <label class="es-date"><span>${mdw(day)}</span><input type="date" data-es="date" value="${d.day}" aria-label="日付"></label>
@@ -1383,8 +1384,13 @@
   $sheet.addEventListener('change', ev => {
     const t = ev.target, d = ui.draft, k = t.dataset.es;
     if (!d || !k) return;
-    if (k === 'allday') d.allDay = t.checked;
-    else if (k === 'date') { if (!t.value) return; d.day = t.value; }
+    if (k === 'allday') {   // つまみが動き終わってから描き直す（すぐ描き直すと動きが見えない）
+      d.allDay = t.checked; t.setAttribute('aria-checked', String(t.checked));
+      updateDraft();
+      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); } }, 300);
+      return;
+    }
+    if (k === 'date') { if (!t.value) return; d.day = t.value; }
     else if (k === 'start') { if (!t.value) return; [d.a, d.b] = clampDay(toMin(t.value), toMin(t.value) + (d.b - d.a)); }   // 長さはそのまま
     else if (k === 'end') { if (!t.value) return; const e1 = toMin(t.value); d.b = e1 > d.a ? e1 : Math.min(24 * 60 - 5, d.a + 30); }
     else if (k === 'cal') { d.cid = t.value; d.label = ''; d.color = ''; }

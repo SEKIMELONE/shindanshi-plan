@@ -546,16 +546,26 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-sec { display: flex; flex-direction: column; border-bottom: 1px solid var(--border); padding: 6px 0; }
 .es-sec:last-of-type { border-bottom: 0; }
 .es-row { display: flex; align-items: center; gap: 18px; min-height: 46px; color: var(--muted); }
-.es-row.es-top-al { align-items: flex-start; padding-top: 10px; }
+.es-row.es-top-al { align-items: flex-start; padding-top: 2px; }
+.es-row.es-top-al .es-ic { margin-top: 8px; }   /* 説明の1行目の高さにアイコンをそろえる（欄の上の余白8px＋行の高さ22.5pxの真ん中） */
 .es-ic-sp { width: 22px; flex: none; }
 .es-lbl { flex: 1; color: var(--text); font-size: 15px; }
-.es-switch { position: relative; width: 44px; height: 26px; flex: none; }
+/* 終日：行のどこを押しても切り替わる。つまみはバネで動き、オンでチェックが出る */
+.es-allday { cursor: pointer; margin: 0 -8px; padding: 0 8px; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+.es-allday:active { background: var(--surface-2); }
+.es-lbl small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); line-height: 1.3; }
+.es-switch { position: relative; width: 52px; height: 30px; flex: none; }
 .es-switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
-.es-switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--border); transition: background .15s; }
-.es-switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
-.es-switch input:checked + i { background: var(--accent); }
-.es-switch input:checked + i::after { transform: translateX(18px); }
-.es-switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+.es-switch .trk { position: absolute; inset: 0; border-radius: 99px; background: var(--border); transition: background .2s; }
+.es-switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 99px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.28);
+  display: grid; place-items: center; transition: left .32s cubic-bezier(.34, 1.56, .64, 1), width .14s ease-out; }
+.es-switch .knob::after { content: ""; width: 9px; height: 5px; margin-top: -2px; border: solid var(--accent); border-width: 0 0 2.5px 2.5px; transform: rotate(-45deg) scale(0); transition: transform .22s cubic-bezier(.34, 1.56, .64, 1); }
+.es-switch input:checked + .trk { background: var(--accent); }
+.es-switch input:checked + .trk .knob { left: 25px; }
+.es-switch input:checked + .trk .knob::after { transform: rotate(-45deg) scale(1); }
+.es-switch input:active + .trk .knob { width: 30px; }                       /* 押している間、つまみがのびる */
+.es-switch input:checked:active + .trk .knob { left: 19px; }
+.es-switch input:focus-visible + .trk { outline: 2px solid var(--accent); outline-offset: 2px; }
 .es-when { gap: 8px; }
 .es-when .es-ic-sp { margin-right: 10px; }
 .es-date { position: relative; color: var(--text); font-size: 15px; font-weight: 600; padding: 6px 8px; margin-left: -8px; white-space: nowrap; border-radius: 8px; cursor: pointer; }
