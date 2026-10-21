@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v51';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v53';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1138,7 +1138,7 @@
     const scroll = $sheet.scrollTop;
     $sheet.innerHTML = sheetHtml();
     $sheet.scrollTop = scroll;
-    placeSoon();
+    placeSoon(true);
   }
 
   // カレンダーの上の下書きを、描き直さずに動かす（日や終日が変わったときだけ描き直す）
@@ -1182,8 +1182,10 @@
   }
 
   // 吹き出しを、下書き（予定）のとなりに置く。横に入らなければ上か下。矢印で予定を指す
-  function placeSheet() {
+  function placeSheet(glide) {
     if (!sheetOpen()) { $arrow.hidden = true; return; }
+    // 中身が変わって位置が変わるときはすべらせて動かす。スクロールについていくときはそのまま
+    $sheet.classList.toggle('glide', !!glide); $arrow.classList.toggle('glide', !!glide);
     const anchor = $view.querySelector('.ev.draft');
     const vw = document.documentElement.clientWidth, vh = window.visualViewport ? visualViewport.height : innerHeight;
     const W = Math.min(380, vw - 16), H = $sheet.scrollHeight + 4, gap = 12;
@@ -1219,18 +1221,36 @@
     $arrow.hidden = false;
   }
   let placeRaf = 0;
-  const placeSoon = () => { cancelAnimationFrame(placeRaf); placeRaf = requestAnimationFrame(placeSheet); };
-  addEventListener('scroll', () => { if (sheetOpen()) placeSoon(); }, { passive: true });
-  addEventListener('resize', () => { if (sheetOpen()) placeSoon(); });
+  const placeSoon = glide => { cancelAnimationFrame(placeRaf); placeRaf = requestAnimationFrame(() => placeSheet(glide)); };
+  addEventListener('scroll', () => { if (sheetOpen()) placeSoon(false); }, { passive: true });
+  addEventListener('resize', () => { if (sheetOpen()) placeSoon(false); });
   // 予定が隠れていたら（画面の外・上のヘッダーの下）、見える位置までスクロールする
+  // 自前のなめらかなスクロール（ブラウザごとの差をなくす）。始めは速く、終わりはゆっくり止まる
+  let glideRaf = 0;
+  function glideScroll(dy) {
+    cancelAnimationFrame(glideRaf);
+    const y0 = scrollY, y1 = Math.max(0, Math.min(document.documentElement.scrollHeight - innerHeight, y0 + dy));
+    if (Math.abs(y1 - y0) < 1) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { scrollTo(0, y1); return; }
+    const t0 = performance.now(), dur = Math.min(520, 260 + Math.abs(y1 - y0) * 0.25);
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - (1 - k) ** 3;
+      scrollTo(0, y0 + (y1 - y0) * e);
+      if (k < 1) glideRaf = requestAnimationFrame(step);
+    };
+    glideRaf = requestAnimationFrame(step);
+  }
+  addEventListener('wheel', () => cancelAnimationFrame(glideRaf), { passive: true });
+  addEventListener('touchstart', () => cancelAnimationFrame(glideRaf), { passive: true });
   function showDraft() {
     const el = $view.querySelector('.ev.draft');
     if (!el) return;
     const r = el.getBoundingClientRect();
     const head = Math.max(60, (document.querySelector('.cal-sticky, .daystrip')?.getBoundingClientRect().bottom || 60));
     const vh = window.visualViewport ? visualViewport.height : innerHeight;
-    if (r.top < head + 8 || r.top > vh - 160) scrollBy(0, r.top - head - Math.min(120, vh * 0.15));
-    else return;
+    if (r.top >= head + 8 && r.top <= vh - 160) return;
+    // なめらかにスクロールし、その間も吹き出しは予定について動く（scroll のたびに置き直す）
+    glideScroll(r.top - head - Math.min(120, vh * 0.15));
     placeSheet();
   }
   // 下書きが、シートに隠れない位置に来るようにスクロールする
@@ -1390,7 +1410,7 @@
     if (k === 'allday') {   // つまみが動き終わってから描き直す（すぐ描き直すと動きが見えない）
       d.allDay = t.checked; t.setAttribute('aria-checked', String(t.checked));
       updateDraft();
-      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); showDraft(); placeSheet(); } }, 300);
+      setTimeout(() => { if (ui.draft === d) { drawSheet(); updateDraft(); } }, 300);
       return;
     }
     if (k === 'date') { if (!t.value) return; d.day = t.value; }
