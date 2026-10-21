@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v55';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v56';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1002,9 +1002,19 @@
   $sheet.className = 'evsheet';
   $sheet.setAttribute('aria-label', '予定');
   document.body.appendChild($sheet);
-  const $arrow = document.createElement('div');
+  // 中身はスクロールする箱に入れ、矢印は吹き出し本体の子にする（いっしょに動き、枠線ともつながる）
+  const $scroll = document.createElement('div');
+  $scroll.className = 'es-scroll';
+  $sheet.appendChild($scroll);
+  const $arrow = document.createElement('i');
   $arrow.className = 'es-pointer'; $arrow.hidden = true; $arrow.setAttribute('aria-hidden', 'true');
-  document.body.appendChild($arrow);
+  $sheet.appendChild($arrow);
+  // 矢印を、画面上の点 (ax, ay) に置く（吹き出しの左上からの位置に直す）
+  const setArrow = (side, ax, ay, left, top) => {
+    const bw = $sheet.clientLeft || 0;
+    $sheet.dataset.side = side; $arrow.dataset.side = side;
+    $arrow.style.left = `${ax - left - bw}px`; $arrow.style.top = `${ay - top - bw}px`;
+  };
   const sheetOpen = () => $sheet.open;
   const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半']];
   // くり返しの選択肢（その日の曜日・日付に合わせて書く）
@@ -1149,10 +1159,10 @@
   }
 
   function drawSheet() {
-    const scroll = $sheet.scrollTop;
-    $sheet.innerHTML = sheetHtml();
+    const scroll = $scroll.scrollTop;
+    $scroll.innerHTML = sheetHtml();
     $sheet.classList.toggle('is-allday', !!(ui.draft && ui.draft.allDay));   // 終日なら時刻の欄・長さボタンをたたむ
-    $sheet.scrollTop = scroll;
+    $scroll.scrollTop = scroll;
     placeSoon(true);
   }
 
@@ -1214,15 +1224,17 @@
   function placeSheet(glide) {
     if (!sheetOpen()) { $arrow.hidden = true; return; }
     // 中身が変わって位置が変わるときはすべらせて動かす。スクロールについていくときはそのまま
-    $sheet.classList.toggle('glide', !!glide); $arrow.classList.toggle('glide', !!glide);
+    $sheet.classList.toggle('glide', !!glide);
     const anchor = $view.querySelector('.ev.draft');
     const vw = document.documentElement.clientWidth, vh = window.visualViewport ? visualViewport.height : innerHeight;
-    const W = Math.min(380, vw - 16), H = $sheet.scrollHeight + 4, gap = 12;
+    const bw = $sheet.clientLeft || 0;
+    const W = Math.min(380, vw - 16), H = $scroll.scrollHeight + bw * 2, gap = 12;
+    const fit = (left, top, h) => { Object.assign($sheet.style, { left: `${left}px`, top: `${top}px` }); $scroll.style.maxHeight = `${Math.max(120, h - bw * 2)}px`; };
     const topLim = 8, botLim = vh - 8;
     $sheet.style.width = `${W}px`;
     if (!anchor) {   // 予定が画面にないときは真ん中
       const h = Math.min(H, botLim - topLim);
-      Object.assign($sheet.style, { left: `${(vw - W) / 2}px`, top: `${Math.max(topLim, (vh - h) / 2)}px`, maxHeight: `${h}px` });
+      fit((vw - W) / 2, Math.max(topLim, (vh - h) / 2), h);
       $arrow.hidden = true; return;
     }
     const r = anchor.getBoundingClientRect();
@@ -1230,7 +1242,7 @@
     if (pin) {   // 位置を止めてあるときは動かさず、矢印だけ、予定に向けられる辺に出す
       const left = Math.max(8, Math.min(vw - W - 8, pin.left)), top = Math.max(topLim - 200, Math.min(botLim - 160, pin.top));
       const h = Math.min(H, botLim - top), bottom = top + Math.min(H, h);
-      Object.assign($sheet.style, { left: `${left}px`, top: `${top}px`, maxHeight: `${h}px` });
+      fit(left, top, h);
       const cx = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)), cy = Math.max(top + 20, Math.min(bottom - 20, r.top + Math.min(r.height, 32) / 2));
       let sd = '', ax = 0, ay = 0;
       if (r.bottom <= top && r.right > left && r.left < left + W) { sd = 'below'; ax = cx; ay = top; }
@@ -1238,7 +1250,7 @@
       else if (r.right <= left) { sd = 'right'; ax = left; ay = cy; }
       else if (r.left >= left + W) { sd = 'left'; ax = left + W; ay = cy; }
       $arrow.hidden = !sd || r.bottom < 0 || r.top > vh;
-      if (sd) { $sheet.dataset.side = sd; $arrow.dataset.side = sd; $arrow.style.left = `${ax}px`; $arrow.style.top = `${ay}px`; }
+      if (sd) setArrow(sd, ax, ay, left, top);
       return;
     }
     let side;
@@ -1258,10 +1270,8 @@
       top = side === 'below' ? Math.min(r.bottom + gap, botLim - h) : Math.max(topLim, r.top - gap - h);
       ax = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)); ay = side === 'below' ? top : top + h;
     }
-    Object.assign($sheet.style, { left: `${left}px`, top: `${top}px`, maxHeight: `${h}px` });
-    $sheet.dataset.side = side;
-    $arrow.dataset.side = side;
-    $arrow.style.left = `${ax}px`; $arrow.style.top = `${ay}px`;
+    fit(left, top, h);
+    setArrow(side, ax, ay, left, top);
     $arrow.hidden = false;
   }
   let placeRaf = 0;

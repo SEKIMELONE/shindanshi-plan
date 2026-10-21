@@ -515,12 +515,13 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 @media (min-width: 900px) { .fab { right: max(28px, calc(50% - 560px)); } }
 body.sheet-open .fab { display: none; }
 
-.evsheet { position: fixed; inset: auto; margin: 0; left: 8px; top: 8px; width: 380px; max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; overscroll-behavior: contain; z-index: 30;
-  border: 1px solid var(--border); padding: 4px 0 14px; border-radius: 18px; background: var(--surface); color: var(--text);
+.evsheet { position: fixed; inset: auto; margin: 0; left: 8px; top: 8px; width: 380px; overflow: visible; z-index: 30;
+  border: 1px solid var(--border); padding: 0; border-radius: 18px; background: var(--surface); color: var(--text);
   box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.08); animation: sheet-in .14s ease-out; }
 @keyframes sheet-in { from { transform: scale(.97); opacity: 0; } }
 /* 吹き出しの矢印（予定を指す） */
-.es-pointer { position: fixed; z-index: 31; width: 14px; height: 14px; background: var(--surface); border: 1px solid var(--border); pointer-events: none; transform: translate(-50%, -50%) rotate(45deg); }
+.es-scroll { max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; overscroll-behavior: contain; padding: 4px 0 14px; border-radius: inherit; }
+.es-pointer { position: absolute; z-index: 3; width: 14px; height: 14px; background: var(--surface); border: 1px solid var(--border); pointer-events: none; transform: translate(-50%, -50%) rotate(45deg); }
 .es-pointer[hidden] { display: none; }
 .es-pointer[data-side="right"] { border-top-color: transparent; border-right-color: transparent; }
 .es-pointer[data-side="left"] { border-bottom-color: transparent; border-left-color: transparent; }
@@ -604,8 +605,9 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 @media (prefers-reduced-motion: reduce) { .evsheet, .ev.draft { animation: none; } }
 .ev .rz.up { top: -2px; bottom: auto; }
 .ev .rz.up::after { top: 4px; bottom: auto; }
-.evsheet.glide, .es-pointer.glide { transition: top .24s cubic-bezier(.2, .8, .2, 1), left .24s cubic-bezier(.2, .8, .2, 1), max-height .24s cubic-bezier(.2, .8, .2, 1); }
-@media (prefers-reduced-motion: reduce) { .evsheet.glide, .es-pointer.glide { transition: none; } }
+.evsheet.glide { transition: top .24s cubic-bezier(.2, .8, .2, 1), left .24s cubic-bezier(.2, .8, .2, 1); }
+.evsheet.glide .es-scroll, .evsheet.glide .es-pointer { transition: max-height .24s cubic-bezier(.2, .8, .2, 1), top .24s cubic-bezier(.2, .8, .2, 1), left .24s cubic-bezier(.2, .8, .2, 1); }
+@media (prefers-reduced-motion: reduce) { .evsheet.glide, .evsheet.glide .es-scroll, .evsheet.glide .es-pointer { transition: none; } }
 /* 終日にしたとき：時刻の欄は消え、長さボタンと重なりの表示は下からなめらかにたたむ */
 .es-times { transition: opacity .2s; }
 .evsheet.is-allday .es-times { opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s; }
