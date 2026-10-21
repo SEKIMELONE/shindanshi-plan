@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v46';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v47';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1087,10 +1087,9 @@
       const cur = d.label || '';
       const chip = l => `<button type="button" class="es-chip${cur === l.id ? ' on' : ''}" data-es="label" data-v="${esc(l.id)}" style="--c:${esc(l.color)}"><i></i>${esc(l.name)}</button>`;
       const dot = l => `<button type="button" class="es-dot${cur === l.id ? ' on' : ''}" data-es="label" data-v="${esc(l.id)}" style="--c:${esc(l.color)}" aria-label="${esc(l.color)}"></button>`;
-      const plainOn = plain.some(l => l.id === cur);
-      return `<div class="es-chips">${!cur ? `<button type="button" class="es-chip on" style="--c:${calColor(d.cid) || 'var(--border)'}"><i></i>カレンダーの色</button>` : ''}${named.map(chip).join('')}
-        ${plain.length ? `<button type="button" class="es-chip more" data-es="morecolors" aria-expanded="${plainOn || d.moreColors ? 'true' : 'false'}">ほかの色</button>` : ''}</div>
-        ${plain.length ? `<div class="es-dots" ${plainOn || d.moreColors ? '' : 'hidden'}>${plain.map(dot).join('')}</div>` : ''}`;
+      // 名前のない色は選ばせない（すでにその色の予定だけ、今の色として丸を1つ出す）
+      const curPlain = plain.find(l => l.id === cur);
+      return `<div class="es-chips">${!cur ? `<button type="button" class="es-chip on" style="--c:${calColor(d.cid) || 'var(--border)'}"><i></i>カレンダーの色</button>` : ''}${curPlain ? dot(curPlain) : ''}${named.map(chip).join('')}</div>`;
     }
     const cur = d.color || '';
     return `<div class="es-dots">${!cur ? `<button type="button" class="es-dot on" style="--c:${calColor(d.cid) || 'var(--border)'}" aria-label="カレンダーの色"></button>` : ''}${GCAL_COLORS.filter(([v]) => GCAL_HEX[v]).map(([v, nm]) => `<button type="button" class="es-dot${cur === v ? ' on' : ''}" data-es="color" data-v="${v}" style="--c:${GCAL_HEX[v]}" aria-label="${nm}"></button>`).join('')}</div>`;
