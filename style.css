@@ -565,8 +565,7 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-times input { border: 0; background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; padding: 6px 8px; border-radius: 8px; font-variant-numeric: tabular-nums; width: 4.6em; text-align: center; }
 .es-times input::-webkit-calendar-picker-indicator { display: none; }
 .es-sugg[hidden], .es-dots[hidden] { display: none; }
-.es-durs .es-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-.es-durs .es-chips::-webkit-scrollbar { display: none; }
+.es-durs .es-chips { flex-wrap: wrap; min-width: 0; padding: 2px 4px 4px 0; }   /* ボタンの影が切れないよう、はみ出しを隠さない */
 .es-arrow { color: var(--faint); }
 .es-durs { min-height: 40px; }
 .es-chips { display: flex; flex-wrap: wrap; gap: 6px; }

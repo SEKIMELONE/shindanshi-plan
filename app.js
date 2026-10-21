@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v45';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v46';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1006,7 +1006,7 @@
   $arrow.className = 'es-pointer'; $arrow.hidden = true; $arrow.setAttribute('aria-hidden', 'true');
   document.body.appendChild($arrow);
   const sheetOpen = () => $sheet.open;
-  const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半'], [120, '2時間'], [180, '3時間']];
+  const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半']];
   const ICON = {
     clock: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/>',
     cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
