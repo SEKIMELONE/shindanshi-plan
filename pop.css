@@ -228,3 +228,6 @@
   [data-design="pop"] *, [data-design="pop"] *::before, [data-design="pop"] *::after { animation: none !important; }
   [data-design="pop"] .ev.ghost { transform: none; }
 }
+/* 角が丸い（24px）ので、上下に固定した帯の中身を角から離す */
+[data-design="pop"] .sticky-actions { padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
+[data-design="pop"] #dlg-form .sticky-head { padding: 16px 16px 12px 24px; }
