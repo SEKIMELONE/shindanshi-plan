@@ -179,7 +179,7 @@
 [data-design="pop"] textarea.memo:focus, [data-design="pop"] .field input:focus, [data-design="pop"] .field textarea:focus, [data-design="pop"] .field select:focus { outline: 3px solid var(--sun); outline-offset: 0; border-color: var(--ink); }
 [data-design="pop"] .settings-group { border-top: 2px dashed var(--border); }
 [data-design="pop"] .settings-group h3 { color: var(--ink); font-weight: 900; }
-[data-design="pop"] #dlg-form .sticky-head, [data-design="pop"] .sticky-actions { border-color: var(--ink); border-width: 2px; }
+[data-design="pop"] .sticky-actions { border-color: var(--ink); border-width: 2px; }
 [data-design="pop"] .check-row input { accent-color: var(--accent); }
 [data-design="pop"] .lb-opt { border: 2px solid var(--ink); }
 [data-design="pop"] .sw-opt input:checked + i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
@@ -230,4 +230,3 @@
 }
 /* 角が丸い（24px）ので、上下に固定した帯の中身を角から離す */
 [data-design="pop"] .sticky-actions { padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
-[data-design="pop"] #dlg-form .sticky-head { padding: 16px 16px 12px 24px; }
