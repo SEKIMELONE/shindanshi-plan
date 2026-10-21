@@ -177,7 +177,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v34';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v35';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1385,13 +1385,14 @@
     if (ended.length) showFinish(ended[ended.length - 1]);   // 一番最近終わったもの
   }
 
+  const POP_CONFETTI = ['accent', 'sun', 'lavender', 'lime', 'orange', 'sky'];
   function showFinish(x) {
     finishShown.add(`${x.key}|${x.uid}`);
     const t = today(), nowMin = new Date().getHours() * 60 + new Date().getMinutes();
     const next = todayStudy().find(y => y.a >= nowMin && y.uid !== x.uid);
     const mins = Math.round(x.hours * 60);
     const confetti = Array.from({ length: 28 }, (_, i) =>
-      `<i style="left:${(i * 37) % 100}%;animation-delay:${(i % 7) * 0.12}s;--r:${(i * 53) % 360}deg;--h:${(i * 47) % 360}"></i>`).join('');
+      `<i style="left:${(i * 37) % 100}%;animation-delay:${(i % 7) * 0.12}s;--r:${(i * 53) % 360}deg;--h:${(i * 47) % 360};--pc:var(--${POP_CONFETTI[i % POP_CONFETTI.length]})"></i>`).join('');
     const wrap = document.createElement('div');
     wrap.className = 'finish';
     wrap.style.setProperty('--c', x.c || 'var(--accent)');
@@ -1961,10 +1962,15 @@
         <label class="field"><span>財務1問（15分）平日</span><select name="daily">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(false) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="field"><span>財務1問（15分）土日</span><select name="dailyWE">${DAILY_TIMES.map(([v, n]) => `<option value="${v}" ${dailyAt(true) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
-      <label class="field"><span>表示</span><select name="theme">
-        <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末の設定に合わせる</option>
-        <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
-        <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
+      <div class="row2">
+        <label class="field"><span>デザイン</span><select name="design">
+          <option value="pop" ${st.design !== 'std' ? 'selected' : ''}>ポップ</option>
+          <option value="std" ${st.design === 'std' ? 'selected' : ''}>シンプル</option></select></label>
+        <label class="field"><span>表示</span><select name="theme">
+          <option value="auto" ${st.theme === 'auto' ? 'selected' : ''}>端末に合わせる</option>
+          <option value="light" ${st.theme === 'light' ? 'selected' : ''}>ライト</option>
+          <option value="dark" ${st.theme === 'dark' ? 'selected' : ''}>ダーク</option></select></label>
+      </div>
       <div class="settings-group"><h3>Googleカレンダー連携</h3>
         <p class="small muted">勉強のコマを、Googleカレンダーの専用カレンダー「診断士プラン」に自動で反映します（下の「反映する期間」の分。最初はまとめて送らず、20秒おきに2週ずつ送ります）。動かす・「終わった」にすると、カレンダー側も変わります。勉強の記録もここに保管されるので、スマホとPCの両方で設定すると記録を共有でき、端末のデータが消えても入れ直せば戻ります。</p>
         <label class="field"><span>ウェブアプリのURL</span><input name="gurl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(st.gcal.url)}"></label>
@@ -2071,7 +2077,7 @@
         span: fval('gspan') || 'sem',
       };
       const reconnect = gcal.url !== st.gcal.url || gcal.token !== st.gcal.token;
-      S.settings = { ...st, start, exam, theme: fval('theme'), pomo: !!$form.elements.pomo.checked, dailyAt: fval('daily'), dailyAtWE: fval('dailyWE'), gcal };
+      S.settings = { ...st, start, exam, theme: fval('theme'), design: fval('design'), pomo: !!$form.elements.pomo.checked, dailyAt: fval('daily'), dailyAtWE: fval('dailyWE'), gcal };
       if (reconnect) {
         // つなぎ先が変わったら、まず保管してある記録を読み込む（空の記録で上書きしないため）。カレンダーは全部送り直す
         S.gsync = { hash: {}, last: 0, err: '', clast: 0, cerr: '' };
@@ -2133,6 +2139,7 @@
     const th = S.settings.theme;
     if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th;
     else delete document.documentElement.dataset.theme;
+    document.documentElement.dataset.design = S.settings.design === 'std' ? 'std' : 'pop';   // 見た目：ポップ（標準）／シンプル
   }
 
   function switchTab(tab) {
