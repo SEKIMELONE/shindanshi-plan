@@ -86,7 +86,6 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'xadd',  cid, title, start, end, allDay, color, label, loc, desc } … 予定を追加する
 //  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
 //  { token, op: 'xlabel', cid, eid, start, label }             … 予定に名前つきの色（ラベル）を付ける
-//  { token, op: 'xlabelname', cid, id, name }                  … 色（ラベル）に名前を付ける・変える（空なら名前を消す）
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
 //      … from〜to の範囲にあるアプリのコマを、送られてきた内容とそっくり同じにする（足す・直す・消す）
 function doPost(e) {
@@ -111,7 +110,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 8 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 7 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -149,22 +148,6 @@ function doPost(e) {
       });
     });
     return out_({ ok: true, events: events, labels: labels });
-  }
-
-  if (req.op === 'xlabelname') {
-    if (!hasApi_()) return out_({ ok: false, error: 'スクリプトに「Google Calendar API」のサービスを追加してください' });
-    try {
-      const lp = Calendar.Calendars.get(req.cid).labelProperties || {};
-      const ls = lp.eventLabels || [];
-      const l = ls.find(x => x.id === req.id);
-      if (!l) return out_({ ok: false, error: 'その色が見つかりません' });
-      const name = String(req.name || '').trim().slice(0, 50);
-      if (name) l.name = name; else delete l.name;
-      Calendar.Calendars.patch({ labelProperties: lp }, req.cid);
-      return out_({ ok: true, labels: labels_(req.cid) });
-    } catch (err) {
-      return out_({ ok: false, error: /owner/i.test(String(err)) ? 'このカレンダーの色の名前は、カレンダーの持ち主しか変えられません' : '色の名前を変えられませんでした' });
-    }
   }
 
   if (/^x(move|edit|del|add|color|label)$/.test(req.op || '')) {
