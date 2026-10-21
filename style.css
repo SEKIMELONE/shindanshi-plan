@@ -515,11 +515,24 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 @media (min-width: 900px) { .fab { right: max(28px, calc(50% - 560px)); } }
 body.sheet-open .fab { display: none; }
 
-.evsheet { position: fixed; inset: 0; margin: auto; width: min(480px, calc(100vw - 24px)); height: fit-content; max-height: calc(var(--vvh, 100dvh) - 40px); overflow: auto; overscroll-behavior: contain;
-  border: 0; padding: 4px 0 14px; border-radius: 20px; background: var(--surface); color: var(--text);
-  box-shadow: 0 20px 60px rgba(0,0,0,.28); animation: sheet-in .16s ease-out; }
-.evsheet::backdrop { background: rgba(10, 12, 16, .35); }
+.evsheet { position: fixed; inset: auto; margin: 0; left: 8px; top: 8px; width: 380px; max-height: calc(var(--vvh, 100dvh) - 16px); overflow: auto; overscroll-behavior: contain; z-index: 30;
+  border: 1px solid var(--border); padding: 4px 0 14px; border-radius: 18px; background: var(--surface); color: var(--text);
+  box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.08); animation: sheet-in .14s ease-out; }
 @keyframes sheet-in { from { transform: scale(.97); opacity: 0; } }
+/* 吹き出しの矢印（予定を指す） */
+.es-pointer { position: fixed; z-index: 31; width: 14px; height: 14px; background: var(--surface); border: 1px solid var(--border); pointer-events: none; transform: translate(-50%, -50%) rotate(45deg); }
+.es-pointer[hidden] { display: none; }
+.es-pointer[data-side="right"] { border-top-color: transparent; border-right-color: transparent; }
+.es-pointer[data-side="left"] { border-bottom-color: transparent; border-left-color: transparent; }
+.es-pointer[data-side="below"] { border-bottom-color: transparent; border-right-color: transparent; }
+.es-pointer[data-side="above"] { border-top-color: transparent; border-left-color: transparent; }
+/* 下の端を引っぱって長さを変えるつまみ */
+.ev .rz { position: absolute; left: 0; right: 0; bottom: -2px; height: 10px; cursor: ns-resize; touch-action: none; z-index: 2; }
+.ev .rz::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 16px; height: 3px; margin-left: -8px; border-radius: 99px; background: currentColor; opacity: 0; transition: opacity .12s; }
+.ev:hover .rz::after, .ev.draft .rz::after, .ev.resizing .rz::after { opacity: .55; }
+.ev.resizing { z-index: 6; box-shadow: 0 6px 16px rgba(0,0,0,.2); }
+.ev.resizing .gt { display: block; }
+body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important; }
 .es-top { position: sticky; top: -4px; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px 6px; background: var(--surface); }
 .es-h { flex: 1; font-size: 13px; font-weight: 700; color: var(--muted); }
 .es-top .icon-btn svg, .es-ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }

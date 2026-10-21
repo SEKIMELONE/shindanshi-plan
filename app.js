@@ -162,6 +162,7 @@
       scrollTo(0, el ? Math.max(0, el.getBoundingClientRect().top + scrollY - innerHeight * 0.3) : 0);
     }
     gcalSchedule();
+    if (typeof placeSheet === 'function' && $sheet.open) placeSheet();
     if (ui.tab === 'overview') {
       const g = $view.querySelector('.gantt-wrap');
       if (g) g.scrollLeft = Math.max(0, (weekOf(today()) - 4) * 18);
@@ -177,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v41';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v42';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -896,6 +897,8 @@
     if (l && /^#[0-9a-f]{6}$/i.test(l.color)) return l.color;
     return GCAL_HEX[e.color] || (/^#[0-9a-f]{6}$/i.test(e.ccol || '') ? e.ccol : '');
   };
+  // 下の端を引っぱって長さを変えられる予定：時間つきで、同じ日のうちに終わるもの
+  const resizable = x => x.a != null && x.e.eid && !x.e.allDay && new Date(x.e.start).toDateString() === new Date(x.e.end - 1).toDateString();
   function extHtml(x, style, mode) {
     const col = extColor(x.e);
     if (col) style = `${style};--c:${col}`;
@@ -904,7 +907,7 @@
     const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
     const editing = ui.draft && ui.draft.mode === 'edit' && ui.draft.key === x.key && ui.draft.n === x.n;
     return `<button class="ev ext${col ? ' tint' : ''}${editing ? ' editing' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
-      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}</button>`;
+      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}${resizable(x) && !editing ? '<i class="rz" data-rz="ext"></i>' : ''}</button>`;
   }
 
   // ---------- 自分のカレンダーの予定を書き換える（動かす・名前・削除・追加） ----------
@@ -992,12 +995,16 @@
     });
   }
 
-  // ---------- 予定を入れる・直す画面（真ん中に出すポップアップ） ----------
-  // 後ろのカレンダーには「下書き」のブロックを出し、時間や色を変えるとその場で動く
+  // ---------- 予定を入れる・直す画面（予定の横に出す吹き出し） ----------
+  // カレンダーには「下書き」のブロックを出し、時間や色を変えるとその場で動く。
+  // 吹き出しを開いたまま空いているところをタップすると、下書きがそこへ動く。下の端を引っぱると長さが変わる
   const $sheet = document.createElement('dialog');
   $sheet.className = 'evsheet';
   $sheet.setAttribute('aria-label', '予定');
   document.body.appendChild($sheet);
+  const $arrow = document.createElement('div');
+  $arrow.className = 'es-pointer'; $arrow.hidden = true; $arrow.setAttribute('aria-hidden', 'true');
+  document.body.appendChild($arrow);
   const sheetOpen = () => $sheet.open;
   const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半'], [120, '2時間'], [180, '3時間']];
   const ICON = {
@@ -1131,6 +1138,7 @@
     const scroll = $sheet.scrollTop;
     $sheet.innerHTML = sheetHtml();
     $sheet.scrollTop = scroll;
+    placeSoon();
   }
 
   // カレンダーの上の下書きを、描き直さずに動かす（日や終日が変わったときだけ描き直す）
@@ -1141,7 +1149,7 @@
     if (d.allDay) return `<div class="ev draft chip" data-action="draft" data-day="${d.day}" data-ad="1" style="--c:${c};${ink}" aria-hidden="true">${t}</div>`;
     const ph = mode === 'day' ? DAY_HPX : HOUR_PX;
     const a = Math.max(MIN_H * 60, d.a), top = (a - MIN_H * 60) / 60 * ph, hgt = Math.max(14, (d.b - a) / 60 * ph - 2);
-    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}</div>`;
+    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}<i class="rz" data-rz="draft"></i></div>`;
   }
   function updateDraft() {
     const d = ui.draft;
@@ -1159,10 +1167,62 @@
     const n = tmp.firstElementChild;
     el.style.cssText = n.style.cssText;
     el.innerHTML = n.innerHTML;
+    placeSheet();
+  }
+
+  // 吹き出しを、下書き（予定）のとなりに置く。横に入らなければ上か下。矢印で予定を指す
+  function placeSheet() {
+    if (!sheetOpen()) { $arrow.hidden = true; return; }
+    const anchor = $view.querySelector('.ev.draft');
+    const vw = document.documentElement.clientWidth, vh = window.visualViewport ? visualViewport.height : innerHeight;
+    const W = Math.min(380, vw - 16), H = $sheet.scrollHeight + 4, gap = 12;
+    const topLim = 8, botLim = vh - 8;
+    $sheet.style.width = `${W}px`;
+    if (!anchor) {   // 予定が画面にないときは真ん中
+      const h = Math.min(H, botLim - topLim);
+      Object.assign($sheet.style, { left: `${(vw - W) / 2}px`, top: `${Math.max(topLim, (vh - h) / 2)}px`, maxHeight: `${h}px` });
+      $arrow.hidden = true; return;
+    }
+    const r = anchor.getBoundingClientRect();
+    let side;
+    if (vw - r.right - gap >= W + 8) side = 'right';
+    else if (r.left - gap >= W + 8) side = 'left';
+    else side = (botLim - r.bottom) >= Math.min(H, 360) || (botLim - r.bottom) >= (r.top - topLim) ? 'below' : 'above';
+    let left, top, h, ax, ay;
+    if (side === 'right' || side === 'left') {
+      h = Math.min(H, botLim - topLim);
+      left = side === 'right' ? r.right + gap : r.left - gap - W;
+      top = Math.max(topLim, Math.min(botLim - h, r.top - 24));
+      ay = Math.max(r.top, Math.min(r.bottom, r.top + 16)); ax = side === 'right' ? left : left + W;
+    } else {
+      h = Math.min(H, side === 'below' ? botLim - r.bottom - gap : r.top - gap - topLim);
+      h = Math.max(h, 160);
+      left = Math.max(8, Math.min(vw - W - 8, r.left + r.width / 2 - W / 2));
+      top = side === 'below' ? Math.min(r.bottom + gap, botLim - h) : Math.max(topLim, r.top - gap - h);
+      ax = Math.max(left + 20, Math.min(left + W - 20, r.left + r.width / 2)); ay = side === 'below' ? top : top + h;
+    }
+    Object.assign($sheet.style, { left: `${left}px`, top: `${top}px`, maxHeight: `${h}px` });
+    $sheet.dataset.side = side;
+    $arrow.dataset.side = side;
+    $arrow.style.left = `${ax}px`; $arrow.style.top = `${ay}px`;
+    $arrow.hidden = false;
+  }
+  let placeRaf = 0;
+  const placeSoon = () => { cancelAnimationFrame(placeRaf); placeRaf = requestAnimationFrame(placeSheet); };
+  addEventListener('scroll', () => { if (sheetOpen()) placeSoon(); }, { passive: true });
+  addEventListener('resize', () => { if (sheetOpen()) placeSoon(); });
+  // 予定が隠れていたら（画面の外・上のヘッダーの下）、見える位置までスクロールする
+  function showDraft() {
+    const el = $view.querySelector('.ev.draft');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const head = Math.max(60, (document.querySelector('.cal-sticky, .daystrip')?.getBoundingClientRect().bottom || 60));
+    const vh = window.visualViewport ? visualViewport.height : innerHeight;
+    if (r.top < head + 8 || r.top > vh - 160) scrollBy(0, r.top - head - Math.min(120, vh * 0.15));
   }
   // 下書きが、シートに隠れない位置に来るようにスクロールする
   function revealDraft() {
-    return;   // 真ん中のポップアップにしたので、スクロールで避けなくてよい
+    placeSoon(); return;   // 吹き出しは予定のとなりに出るので、スクロールで避けなくてよい
     requestAnimationFrame(() => {
       const el = $view.querySelector('.ev.draft');
       if (!el || !sheetOpen()) return;
@@ -1178,8 +1238,9 @@
     ui.draft = d;
     document.body.classList.add('sheet-open');
     drawSheet();
-    if (!sheetOpen()) $sheet.showModal();
+    if (!sheetOpen()) $sheet.show();
     render();
+    showDraft(); placeSheet();
     if (matchMedia('(pointer: fine)').matches && d.mode === 'add') $sheet.querySelector('.es-title')?.focus();
   }
   function closeSheet(force) {
@@ -1188,6 +1249,7 @@
     if (!force && d && d.mode === 'add' && (d.title || d.loc || d.desc) && !confirm('この予定は保存されていません。破棄しますか？')) return false;
     ui.draft = null;
     $sheet.close();
+    $arrow.hidden = true;
     document.body.classList.remove('sheet-open');
     render();
     return true;
@@ -1325,7 +1387,13 @@
     if (ev.key === 'Enter' && ev.target.classList.contains('es-title') && !ev.isComposing) { ev.preventDefault(); ev.target.blur(); }
   });
   $sheet.addEventListener('cancel', ev => { ev.preventDefault(); closeSheet(); });
-  $sheet.addEventListener('click', ev => { if (ev.target === $sheet) closeSheet(); });   // 外側をタップしたら閉じる
+  // 吹き出しの外をタップしたら閉じる（カレンダーの中のタップは、下書きを動かす・別の予定を開く側で扱う）
+  document.addEventListener('pointerdown', ev => {
+    if (!sheetOpen() || $sheet.contains(ev.target)) return;
+    if (ev.target.closest('#view .cal-body .col, #view .cal-allday .ad, #view .ev, .tabs, [data-action="settings"]')) return;
+    closeSheet();
+  }, true);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet(); });
   // キーボードが出たら、その上にシートを持ち上げる
   if (window.visualViewport) {
     const vv = window.visualViewport;
@@ -1448,7 +1516,7 @@
     swipe = { x: t.clientX, y: t.clientY, at: Date.now() };
   }, { passive: true });
   $view.addEventListener('touchend', e => {
-    if (!swipe || (drag && drag.active) || (mk && mk.active) || $dlg.open || sheetOpen()) { swipe = null; return; }
+    if (!swipe || (drag && drag.active) || (mk && mk.active) || rz || $dlg.open || sheetOpen()) { swipe = null; return; }
     const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     const quick = Date.now() - swipe.at < 700;
     swipe = null;
@@ -1466,6 +1534,53 @@
   let drag = null;
   let dragEndedAt = 0;
   const LONG_PRESS = 350;
+
+  // ---------- 下の端を引っぱって長さを変える（Googleカレンダーと同じ） ----------
+  let rz = null;
+  $view.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.rz');
+    if (!h || e.button > 0) return;
+    const el = h.closest('.ev'), cell = el && el.closest('.col');
+    if (!el || !cell) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    let a, b, ev2 = null;
+    if (h.dataset.rz === 'draft') { if (!ui.draft) return; a = ui.draft.a; b = ui.draft.b; }
+    else {
+      ev2 = ((extCache[el.dataset.k] || {}).events || [])[+el.dataset.n];
+      if (!ev2) return;
+      const s0 = new Date(ev2.start); a = s0.getHours() * 60 + s0.getMinutes(); b = a + Math.round((ev2.end - ev2.start) / 60000);
+    }
+    rz = { id: e.pointerId, el, cell, kind: h.dataset.rz, ev: ev2, a, b0: b, b, moved: false };
+    el.classList.add('resizing');
+    try { h.setPointerCapture(e.pointerId); } catch (err) { /* 古いブラウザ */ }
+  });
+  addEventListener('pointermove', e => {
+    if (!rz || e.pointerId !== rz.id) return;
+    e.preventDefault();
+    const m = MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60;
+    const b = Math.max(rz.a + 15, Math.min(24 * 60 - 5, Math.round(m / 15) * 15));
+    if (b === rz.b) return;
+    rz.b = b; rz.moved = true;
+    if (rz.kind === 'draft') { ui.draft.b = b; updateDraft(); return; }
+    const top = Math.max(MIN_H * 60, rz.a);
+    rz.el.style.height = `${((b - top) / 60 * hpx - 2).toFixed(1)}px`;
+    let tip = rz.el.querySelector('.gt');
+    if (!tip) { tip = document.createElement('i'); tip.className = 'gt'; rz.el.prepend(tip); }
+    tip.textContent = `${hm(rz.a)}〜${hm(b)}`;
+  }, { passive: false });
+  const endResize = (e, ok) => {
+    if (!rz || e.pointerId !== rz.id) return;
+    const r = rz; rz = null;
+    r.el.classList.remove('resizing');
+    if (!r.moved) return;
+    dragEndedAt = Date.now();
+    if (r.kind === 'draft') { if (ok) drawSheet(); return; }
+    if (!ok || r.b === r.b0) { render(); return; }
+    const e2 = r.ev, ne = e2.start + (r.b - r.a) * 60000;
+    extOps([{ op: 'xmove', cid: e2.cid, eid: e2.eid, start: e2.start, newStart: e2.start, newEnd: ne }], () => { e2.end = ne; }, `「${e2.title}」を ${hm(r.a)}〜${hm(r.b)} にしました`);
+  };
+  addEventListener('pointerup', e => endResize(e, true));
+  addEventListener('pointercancel', e => endResize(e, false));
 
   $view.addEventListener('pointerdown', e => {
     if (!e.target.closest('.ev') && e.button <= 0 && ui.tab === 'cal' && ui.calDays && extOn()) {
@@ -1529,7 +1644,7 @@
     if (drag.active) endDrag(false); else cancelPress();
   });
   // ドラッグ中は画面がスクロールしないように
-  addEventListener('touchmove', e => { if ((drag && drag.active) || (mk && mk.active)) e.preventDefault(); }, { passive: false });
+  addEventListener('touchmove', e => { if ((drag && drag.active) || (mk && mk.active) || rz) e.preventDefault(); }, { passive: false });
   $view.addEventListener('contextmenu', e => { if (e.target.closest('.ev')) e.preventDefault(); });
 
   function cancelPress() {

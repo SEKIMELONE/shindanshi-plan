@@ -185,7 +185,13 @@
 [data-design="pop"] .sw-opt input:checked + i { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
 
 /* 予定を入れるポップアップ */
-[data-design="pop"] .evsheet { border: 2px solid var(--ink); border-radius: 24px; box-shadow: var(--pop-lg); animation: pop-in .3s var(--spring); }
+[data-design="pop"] .evsheet { border: 2px solid var(--ink); border-radius: 20px; box-shadow: var(--pop); animation: pop-in .26s var(--spring); }
+[data-design="pop"] .es-pointer { border: 2px solid var(--ink); width: 16px; height: 16px; }
+[data-design="pop"] .es-pointer[data-side="right"] { border-top-color: transparent; border-right-color: transparent; }
+[data-design="pop"] .es-pointer[data-side="left"] { border-bottom-color: transparent; border-left-color: transparent; }
+[data-design="pop"] .es-pointer[data-side="below"] { border-bottom-color: transparent; border-right-color: transparent; }
+[data-design="pop"] .es-pointer[data-side="above"] { border-top-color: transparent; border-left-color: transparent; }
+[data-design="pop"] .ev.resizing { box-shadow: var(--pop-sm); }
 @keyframes pop-in { from { transform: scale(.9) rotate(-1deg); opacity: 0; } }
 [data-design="pop"] .es-h { color: var(--ink); font-weight: 900; font-size: 14px; }
 [data-design="pop"] .es-title { border-bottom: 2px solid var(--ink); font-weight: 900; }
