@@ -559,7 +559,9 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-when { gap: 8px; }
 .es-when .es-ic-sp { margin-right: 10px; }
 .es-date { position: relative; color: var(--text); font-size: 15px; font-weight: 600; padding: 6px 8px; margin-left: -8px; white-space: nowrap; border-radius: 8px; cursor: pointer; }
-.es-date:hover, .es-date:focus-within { background: var(--surface-2); }
+/* 日付は時刻の欄と同じく、いつも枠つきで出す（押せるとわかるように） */
+.es-date { background: var(--surface-2); margin-left: 0; }
+.es-date:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .es-date input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .es-times { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 .es-times input { border: 0; background: var(--surface-2); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; padding: 6px 8px; border-radius: 8px; font-variant-numeric: tabular-nums; width: 4.6em; text-align: center; }

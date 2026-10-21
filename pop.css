@@ -200,7 +200,8 @@
 [data-design="pop"] .es-sec:last-of-type { border-bottom: 0; }
 [data-design="pop"] .es-row { color: var(--ink); }
 [data-design="pop"] .es-ic { stroke-width: 2.2; }
-[data-design="pop"] .es-date { font-weight: 900; }
+[data-design="pop"] .es-date { font-weight: 900; border: 2px solid var(--ink); border-radius: 8px; background: var(--surface); padding: 5px 10px; }
+[data-design="pop"] .es-date:focus-within { outline: 3px solid var(--sun); outline-offset: 0; }
 [data-design="pop"] .es-times input { border: 2px solid var(--ink); background: var(--surface); font-weight: 900; border-radius: 8px; }
 [data-design="pop"] .es-chip { border: 2px solid var(--ink); color: var(--ink); font-weight: 700; }
 [data-design="pop"] .es-chip i { box-shadow: 0 0 0 1.5px var(--ink); }
