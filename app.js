@@ -177,6 +177,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
+  const APP_VER = 'v32';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1623,6 +1624,7 @@
         </details>
       </div>
       <div class="settings-group"><h3>データ</h3>
+        <p class="small faint">アプリの版：${APP_VER}</p>
         <p class="small muted">記録はこの端末のブラウザの中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどき書き出してください。</p>
         <div class="btns">
           <button class="btn small" type="button" data-dlg="export">書き出す</button>
@@ -1877,7 +1879,16 @@
   render();
   if (gcalOn()) cloudLoad();
 
+  // 新しい版が出ていたら、開いたとき・アプリに戻ったときに取りに行き、入れ替わったら読み込み直す
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const hadCtrl = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadCtrl || reloaded || drag || $dlg.open) return;
+      reloaded = true; location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(reg => document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); }))
+      .catch(() => {});
   }
 })();

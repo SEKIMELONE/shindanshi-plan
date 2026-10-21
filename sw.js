@@ -1,6 +1,6 @@
 // オフラインでも開けるように、アプリの部品を端末に保存しておく。
 // アプリを更新したら VERSION を上げる。
-const VERSION = 'v31';
+const VERSION = 'v32';
 const CACHE = `shindanshi-plan-${VERSION}`;
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'plan.js', 'manifest.webmanifest',
@@ -8,7 +8,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
