@@ -231,3 +231,5 @@
   [data-design="pop"] *, [data-design="pop"] *::before, [data-design="pop"] *::after { animation: none !important; }
   [data-design="pop"] .ev.ghost { transform: none; }
 }
+[data-design="pop"] .es-name .es-in { border: 2px solid var(--ink); border-radius: 8px; padding: 6px 10px; background: var(--surface); }
+[data-design="pop"] .es-name .es-in:focus { outline: 3px solid var(--sun); }

@@ -177,7 +177,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v35';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v36';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1073,6 +1073,33 @@
     return out;
   }
 
+  // 選んだ色に名前をつける（名前のない色）・名前を変える（名前のある色は「名前を変える」から）
+  function nameRow(d, l) {
+    if (!l) return '';
+    if (l.name && !d.renaming) return `<button type="button" class="btn ghost small es-rename" data-es="renaming">「${esc(l.name)}」の名前を変える</button>`;
+    return `<div class="es-name"><input class="es-in" data-es="lname" value="${esc(l.name || '')}" maxlength="50" placeholder="${l.name ? '空にすると名前を消します' : '名前をつける（例：ジャズオケ）'}" autocomplete="off" enterkeyhint="done">
+      <button type="button" class="btn small" data-es="lnamesave">${l.name ? '変える' : 'つける'}</button></div>`;
+  }
+  function setLabels(cid, list) {
+    Object.values(extCache).forEach(c => { if (c.labels && c.labels[cid]) c.labels[cid] = list; });
+    try { localStorage.setItem(EXT_KEY, JSON.stringify(extCache)); } catch (e) { /* 入らなければ取っておかないだけ */ }
+  }
+  function renameLabel(cid, id, name) {
+    const before = labelsOf(cid).map(l => ({ ...l }));
+    setLabels(cid, before.map(l => (l.id === id ? { ...l, name } : l)));   // 先に画面を変える
+    if (ui.draft) { ui.draft.renaming = false; drawSheet(); updateDraft(); }
+    gcalPost({ op: 'xlabelname', cid, id, name })
+      .then(j => {
+        if (j.labels && j.labels.length) setLabels(cid, j.labels);
+        toast(name ? `色の名前を「${name}」にしました` : '色の名前を消しました');
+      })
+      .catch(e => {
+        setLabels(cid, before);
+        toast(`うまくいきませんでした：${e.message || e}`);
+      })
+      .finally(() => { if (sheetOpen()) { drawSheet(); updateDraft(); } else render(); });
+  }
+
   function colorRow(d) {
     const ls = labelsOf(d.cid);
     if (ls.length) {
@@ -1083,7 +1110,7 @@
       const plainOn = plain.some(l => l.id === cur);
       return `<div class="es-chips">${!cur ? `<button type="button" class="es-chip on" style="--c:${calColor(d.cid) || 'var(--border)'}"><i></i>カレンダーの色</button>` : ''}${named.map(chip).join('')}
         ${plain.length ? `<button type="button" class="es-chip more" data-es="morecolors" aria-expanded="${plainOn || d.moreColors ? 'true' : 'false'}">ほかの色</button>` : ''}</div>
-        ${plain.length ? `<div class="es-dots" ${plainOn || d.moreColors ? '' : 'hidden'}>${plain.map(dot).join('')}</div>` : ''}`;
+        ${plain.length ? `<div class="es-dots" ${plainOn || d.moreColors ? '' : 'hidden'}>${plain.map(dot).join('')}</div>` : ''}${nameRow(d, ls.find(l => l.id === cur))}`;
     }
     const cur = d.color || '';
     return `<div class="es-dots">${!cur ? `<button type="button" class="es-dot on" style="--c:${calColor(d.cid) || 'var(--border)'}" aria-label="カレンダーの色"></button>` : ''}${GCAL_COLORS.filter(([v]) => GCAL_HEX[v]).map(([v, nm]) => `<button type="button" class="es-dot${cur === v ? ' on' : ''}" data-es="color" data-v="${v}" style="--c:${GCAL_HEX[v]}" aria-label="${nm}"></button>`).join('')}</div>`;
@@ -1281,9 +1308,19 @@
       return;
     }
     if (k === 'dur') { [d.a, d.b] = clampDay(d.a, d.a + +b.dataset.v); }
-    else if (k === 'label') { d.label = b.dataset.v; d.color = ''; }
+    else if (k === 'label') { d.label = b.dataset.v; d.color = ''; d.renaming = false; }
     else if (k === 'color') { d.color = b.dataset.v; d.label = ''; }
     else if (k === 'morecolors') { d.moreColors = !d.moreColors; }
+    else if (k === 'renaming') { d.renaming = true; drawSheet(); $sheet.querySelector('[data-es=lname]')?.focus(); return; }
+    else if (k === 'lnamesave') {
+      const v = ($sheet.querySelector('[data-es=lname]')?.value || '').trim();
+      const l = labelsOf(d.cid).find(x => x.id === d.label);
+      if (!l) return;
+      if (!v && !l.name) { toast('名前を入れてください'); return; }
+      if (v !== (l.name || '')) renameLabel(d.cid, l.id, v);
+      else { d.renaming = false; drawSheet(); }
+      return;
+    }
     else if (k === 'sugg') {
       const s = suggestions(d.title || '')[+b.dataset.i];
       if (!s) return;
@@ -1323,6 +1360,7 @@
   $sheet.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') { ev.preventDefault(); closeSheet(); }
     if (ev.key === 'Enter' && ev.target.classList.contains('es-title') && !ev.isComposing) { ev.preventDefault(); ev.target.blur(); }
+    if (ev.key === 'Enter' && ev.target.dataset.es === 'lname' && !ev.isComposing) { ev.preventDefault(); $sheet.querySelector('[data-es=lnamesave]')?.click(); }
   });
   $sheet.addEventListener('cancel', ev => { ev.preventDefault(); closeSheet(); });
   $sheet.addEventListener('click', ev => { if (ev.target === $sheet) closeSheet(); });   // 外側をタップしたら閉じる
