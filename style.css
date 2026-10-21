@@ -591,3 +591,5 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-in::placeholder { color: var(--faint); }
 .es-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 0 4px 40px; }
 @media (prefers-reduced-motion: reduce) { .evsheet, .ev.draft { animation: none; } }
+.ev .rz.top { top: -2px; bottom: auto; }
+.ev .rz.top::after { top: 4px; bottom: auto; }

@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v42';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v43';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -907,7 +907,7 @@
     const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
     const editing = ui.draft && ui.draft.mode === 'edit' && ui.draft.key === x.key && ui.draft.n === x.n;
     return `<button class="ev ext${col ? ' tint' : ''}${editing ? ' editing' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
-      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}${resizable(x) && !editing ? '<i class="rz" data-rz="ext"></i>' : ''}</button>`;
+      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}${resizable(x) && !editing ? '<i class="rz top" data-rz="ext" data-edge="top"></i><i class="rz" data-rz="ext"></i>' : ''}</button>`;
   }
 
   // ---------- 自分のカレンダーの予定を書き換える（動かす・名前・削除・追加） ----------
@@ -1149,7 +1149,7 @@
     if (d.allDay) return `<div class="ev draft chip" data-action="draft" data-day="${d.day}" data-ad="1" style="--c:${c};${ink}" aria-hidden="true">${t}</div>`;
     const ph = mode === 'day' ? DAY_HPX : HOUR_PX;
     const a = Math.max(MIN_H * 60, d.a), top = (a - MIN_H * 60) / 60 * ph, hgt = Math.max(14, (d.b - a) / 60 * ph - 2);
-    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}<i class="rz" data-rz="draft"></i></div>`;
+    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}<i class="rz top" data-rz="draft" data-edge="top"></i><i class="rz" data-rz="draft"></i></div>`;
   }
   function updateDraft() {
     const d = ui.draft;
@@ -1537,6 +1537,7 @@
 
   // ---------- 下の端を引っぱって長さを変える（Googleカレンダーと同じ） ----------
   let rz = null;
+  const RZ_SNAP = 5;   // 長さを変えるのは5分刻み
   $view.addEventListener('pointerdown', e => {
     const h = e.target.closest('.rz');
     if (!h || e.button > 0) return;
@@ -1550,23 +1551,26 @@
       if (!ev2) return;
       const s0 = new Date(ev2.start); a = s0.getHours() * 60 + s0.getMinutes(); b = a + Math.round((ev2.end - ev2.start) / 60000);
     }
-    rz = { id: e.pointerId, el, cell, kind: h.dataset.rz, ev: ev2, a, b0: b, b, moved: false };
+    rz = { id: e.pointerId, el, cell, kind: h.dataset.rz, top: h.dataset.edge === 'top', ev: ev2, a0: a, a, b0: b, b, moved: false };
     el.classList.add('resizing');
     try { h.setPointerCapture(e.pointerId); } catch (err) { /* 古いブラウザ */ }
   });
   addEventListener('pointermove', e => {
     if (!rz || e.pointerId !== rz.id) return;
     e.preventDefault();
-    const m = MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60;
-    const b = Math.max(rz.a + 15, Math.min(24 * 60 - 5, Math.round(m / 15) * 15));
-    if (b === rz.b) return;
-    rz.b = b; rz.moved = true;
-    if (rz.kind === 'draft') { ui.draft.b = b; updateDraft(); return; }
-    const top = Math.max(MIN_H * 60, rz.a);
+    const m = Math.round((MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60) / RZ_SNAP) * RZ_SNAP;
+    // 上の端は始まり、下の端は終わりを動かす（5分刻み、5分より短くはしない）
+    const a = rz.top ? Math.max(MIN_H * 60, Math.min(rz.b - RZ_SNAP, m)) : rz.a;
+    const b = rz.top ? rz.b : Math.max(rz.a + RZ_SNAP, Math.min(24 * 60 - 5, m));
+    if (a === rz.a && b === rz.b) return;
+    rz.a = a; rz.b = b; rz.moved = true;
+    if (rz.kind === 'draft') { ui.draft.a = a; ui.draft.b = b; updateDraft(); return; }
+    const top = Math.max(MIN_H * 60, a);
+    rz.el.style.top = `${((top - MIN_H * 60) / 60 * hpx).toFixed(1)}px`;
     rz.el.style.height = `${((b - top) / 60 * hpx - 2).toFixed(1)}px`;
     let tip = rz.el.querySelector('.gt');
     if (!tip) { tip = document.createElement('i'); tip.className = 'gt'; rz.el.prepend(tip); }
-    tip.textContent = `${hm(rz.a)}〜${hm(b)}`;
+    tip.textContent = `${hm(a)}〜${hm(b)}`;
   }, { passive: false });
   const endResize = (e, ok) => {
     if (!rz || e.pointerId !== rz.id) return;
@@ -1575,9 +1579,9 @@
     if (!r.moved) return;
     dragEndedAt = Date.now();
     if (r.kind === 'draft') { if (ok) drawSheet(); return; }
-    if (!ok || r.b === r.b0) { render(); return; }
-    const e2 = r.ev, ne = e2.start + (r.b - r.a) * 60000;
-    extOps([{ op: 'xmove', cid: e2.cid, eid: e2.eid, start: e2.start, newStart: e2.start, newEnd: ne }], () => { e2.end = ne; }, `「${e2.title}」を ${hm(r.a)}〜${hm(r.b)} にしました`);
+    if (!ok || (r.a === r.a0 && r.b === r.b0)) { render(); return; }
+    const e2 = r.ev, ns = e2.start + (r.a - r.a0) * 60000, ne = e2.start + (r.b - r.a0) * 60000;
+    extOps([{ op: 'xmove', cid: e2.cid, eid: e2.eid, start: e2.start, newStart: ns, newEnd: ne }], () => { e2.start = ns; e2.end = ne; }, `「${e2.title}」を ${hm(r.a)}〜${hm(r.b)} にしました`);
   };
   addEventListener('pointerup', e => endResize(e, true));
   addEventListener('pointercancel', e => endResize(e, false));
@@ -1606,8 +1610,8 @@
         if (!mk || !mk.active) return;
       }
       e.preventDefault();
-      const s15 = Math.max(0, Math.min(24 * 60 - 5, Math.round(mkMinute(e.clientY) / 15) * 15));
-      const [a, b] = s15 >= mk.a0 ? [mk.a0, Math.max(mk.a0 + 15, s15)] : [s15, mk.a0 + 15];
+      const s5 = Math.max(0, Math.min(24 * 60 - 5, Math.round(mkMinute(e.clientY) / 5) * 5));
+      const [a, b] = s5 >= mk.a0 ? [mk.a0, Math.max(mk.a0 + 15, s5)] : [s5, mk.a0 + 15];
       if (ui.draft && (ui.draft.a !== a || ui.draft.b !== b)) { ui.draft.a = a; ui.draft.b = b; updateDraft(); }
       return;
     }
