@@ -81,9 +81,9 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'cals' }                            … 読めるカレンダーの一覧
 //  { token, op: 'read', ids, from, to }             … 選んだカレンダーの予定を読む
 //  { token, op: 'xmove', cid, eid, start, newStart, newEnd }   … 予定を動かす（start は元の開始時刻）
-//  { token, op: 'xedit', cid, eid, start, title }              … 予定の名前を変える
+//  { token, op: 'xedit', cid, eid, start, title, loc, desc }   … 予定の名前・場所・メモを変える（送ったものだけ）
 //  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
-//  { token, op: 'xadd',  cid, title, start, end, allDay, color } … 予定を追加する
+//  { token, op: 'xadd',  cid, title, start, end, allDay, color, label, loc, desc } … 予定を追加する
 //  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
 //  { token, op: 'xlabel', cid, eid, start, label }             … 予定に名前つきの色（ラベル）を付ける
 //  { token, from, to, events: [{ id, title, start, end, desc, color }] }
@@ -110,7 +110,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 6 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 7 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -142,6 +142,8 @@ function doPost(e) {
           color: ev.getColor() || '',   // 予定ごとの色（'1'〜'11'）。カレンダーの色のままなら空
           ccol: c.getColor(),           // カレンダーの色（#rrggbb）
           label: lmap[ev.getId() + '|' + start] || '',   // 名前つきの色（ラベル）の id
+          loc: ev.getLocation() || '',
+          desc: String(ev.getDescription() || '').slice(0, 1000),
         });
       });
     });
@@ -155,9 +157,12 @@ function doPost(e) {
     try {
       if (req.op === 'xadd') {
         const title = String(req.title || '').trim() || '予定';
+        const opt = {};
+        if (req.loc) opt.location = String(req.loc);
+        if (req.desc) opt.description = String(req.desc);
         const ev = req.allDay
-          ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end))
-          : c.createEvent(title, new Date(req.start), new Date(req.end));
+          ? c.createAllDayEvent(title, new Date(req.start), new Date(req.end), opt)
+          : c.createEvent(title, new Date(req.start), new Date(req.end), opt);
         if (req.color) ev.setColor(String(req.color));
         if (req.label) setLabel_(req.cid, ev.getId(), (req.allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(), req.label);
         return out_({ ok: true, eid: ev.getId() });
@@ -174,7 +179,9 @@ function doPost(e) {
       } else if (req.op === 'xcolor') {
         ev.setColor(String(req.color));
       } else if (req.op === 'xedit') {
-        ev.setTitle(String(req.title || '').trim() || '予定');
+        if (req.title != null) ev.setTitle(String(req.title).trim() || '予定');
+        if (req.loc != null) ev.setLocation(String(req.loc));
+        if (req.desc != null) ev.setDescription(String(req.desc));
       } else {
         ev.deleteEvent();
       }

@@ -177,7 +177,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v32';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v33';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -385,7 +385,8 @@
       // 持ち越しが多い日は2件だけ出して、残りはまとめる（タップでその日のページ）
       const more = carried.length > 2
         ? `<button class="ev study carry more" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の持ち越し ほか${carried.length - 2}件"><b>持ち越し＋${carried.length - 2}</b></button>` : '';
-      return `<div class="ad" data-col="${k}">${rest.concat(carried.slice(0, 2)).map(x => evHtml(x, '', false, 'chip')).join('')}${more}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}</div>`;
+      const dr = ui.draft && ui.draft.allDay && ui.draft.day === ymd(d) ? draftHtml(ui.draft, 'week') : '';
+      return `<div class="ad" data-col="${k}">${rest.concat(carried.slice(0, 2)).map(x => evHtml(x, '', false, 'chip')).join('')}${more}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}${dr}</div>`;
     }).join('');
 
     const hours = [];
@@ -401,7 +402,8 @@
       }).join('');
       const line = k === todayCol && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
         ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * HOUR_PX).toFixed(1)}px"></div>` : '';
-      return `<div class="col${k === todayCol ? ' today' : ''}" data-col="${k}">${html}${line}</div>`;
+      const dr = ui.draft && !ui.draft.allDay && ui.draft.day === ymd(days[k]) ? draftHtml(ui.draft, 'week') : '';
+      return `<div class="col${k === todayCol ? ' today' : ''}" data-col="${k}">${html}${line}${dr}</div>`;
     }).join('');
 
     const ranges = SUBJ.slice(0, STUDY_N).map((name, i) => [name, range(w, i)]).filter(([, r]) => r)
@@ -444,7 +446,7 @@
         ${gcalOn() ? `<p class="small faint gsync${S.gsync.err || S.gsync.cerr || S.gsync.xerr ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
-      <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>`;
+      <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
   }
 
   function toggleCheck(key, uid) {
@@ -548,6 +550,8 @@
     }).join('');
     const line = isT && nowMin >= MIN_H * 60 && nowMin <= MAX_H * 60
       ? `<div class="nowline" style="top:${((nowMin - MIN_H * 60) / 60 * DAY_HPX).toFixed(1)}px"></div>` : '';
+    const dHere = ui.draft && ui.draft.day === ymd(d) ? ui.draft : null;
+    const draftAd = dHere && dHere.allDay ? draftHtml(dHere, 'day') : '', draftTm = dHere && !dHere.allDay ? draftHtml(dHere, 'day') : '';
 
     // 右側：今のコマ
     let nowCard;
@@ -627,12 +631,12 @@
       <div class="dayview">
         <div class="day-main">
           <div class="cal day" style="--hpx:${DAY_HPX}px">
-            ${allday.length || extD.some(x => x.a == null) ? `<div class="cal-row1 cal-allday"><div class="gutter">終日</div><div class="ad" data-col="0">${allday.map(x => evHtml(x, '', false, 'day')).join('')}${extD.filter(x => x.a == null).map(x => extHtml(x, '', 'day')).join('')}</div></div>` : ''}
-            <div class="cal-row1 cal-body" style="height:${(MAX_H - MIN_H) * DAY_HPX}px"><div class="gutter">${hours.join('')}</div><div class="col${isT ? ' today' : ''}" data-col="0">${blocks}${line}</div></div>
+            ${allday.length || extD.some(x => x.a == null) || draftAd ? `<div class="cal-row1 cal-allday"><div class="gutter">終日</div><div class="ad" data-col="0">${allday.map(x => evHtml(x, '', false, 'day')).join('')}${extD.filter(x => x.a == null).map(x => extHtml(x, '', 'day')).join('')}${draftAd}</div></div>` : ''}
+            <div class="cal-row1 cal-body" style="height:${(MAX_H - MIN_H) * DAY_HPX}px"><div class="gutter">${hours.join('')}</div><div class="col${isT ? ' today' : ''}" data-col="0">${blocks}${line}${draftTm}</div></div>
           </div>
         </div>
         <aside class="day-side" aria-label="この日のまとめ">${side}</aside>
-      </div>`;
+      </div>${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
   }
 
   // 残り時間と時計を1秒ごとに進める（画面全体は描き直さない）
@@ -898,7 +902,8 @@
     const e = x.e, when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
     const shown = ymd(addDays(parse(x.key), x.col));
     const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
-    return `<button class="ev ext${col ? ' tint' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
+    const editing = ui.draft && ui.draft.mode === 'edit' && ui.draft.key === x.key && ui.draft.n === x.n;
+    return `<button class="ev ext${col ? ' tint' : ''}${editing ? ' editing' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
       ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}</button>`;
   }
 
@@ -943,6 +948,7 @@
   function openExt(key, n) {
     const e = ((extCache[key] || {}).events || [])[n];
     if (!e) return;
+    if (e.eid) { openEdit(key, n); return; }   // 書き換えられる予定は、追加と同じシートで直す
     const s0 = new Date(e.start), canEdit = !!e.eid;
     const sMin = s0.getHours() * 60 + s0.getMinutes(), len = Math.round((e.end - e.start) / 60000);
     openDlg(`<h2>予定</h2>
@@ -986,46 +992,389 @@
     });
   }
 
-  function openAdd(day, min, allDay) {
-    const cals = S.settings.gcal.read || [];
-    if (!cals.length) return;
-    const pick = cals.find(c => c.id === S.settings.gcal.addCal) || cals.find(c => !/祝日|holiday/i.test(c.name)) || cals[0];
-    const a = Math.max(0, Math.min(23 * 60, min)), b = Math.min(24 * 60 - 5, a + 60);
-    openDlg(`<h2>予定を追加</h2>
-      <label class="field"><span>名前</span><input name="xt" placeholder="例：塾バイト" autofocus></label>
-      <div class="row2">
-        <label class="field"><span>日付</span><input name="xd" type="date" value="${ymd(day)}"></label>
-        <label class="field"><span>カレンダー</span><select name="xc">${cals.map(c => `<option value="${esc(c.id)}" ${c.id === pick.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
-      </div>
-      <label class="check-row"><input name="xa" type="checkbox" ${allDay ? 'checked' : ''}> 終日</label>
-      <div class="row2 xtimes" ${allDay ? 'hidden' : ''}>
-        <label class="field"><span>開始</span><input name="xs" type="time" step="300" value="${hhmm(a)}"></label>
-        <label class="field"><span>終了</span><input name="xe" type="time" step="300" value="${hhmm(b)}"></label>
-      </div>
-      <div id="xpick">${pickFor(pick.id, null)}</div>
-      ${actions(false)}`, act => {
-      if (act !== 'save') return;
-      const title = fval('xt').trim(), d = parse(fval('xd')), cid = fval('xc'), whole = $form.elements.xa.checked;
-      if (!title) { toast('名前を入れてください'); return false; }
-      if (isNaN(d)) { toast('日付を入れてください'); return false; }
-      let start, end;
-      if (whole) { start = atMin(d, 0); end = atMin(addDays(d, 1), 0); }
-      else {
-        const s1 = toMin(fval('xs')), e1 = toMin(fval('xe'));
-        if (!(e1 > s1)) { toast('終了は開始より後にしてください'); return false; }
-        start = atMin(d, s1); end = atMin(d, e1);
-      }
-      S.settings.gcal.addCal = cid; persist();
-      const cal = cals.find(c => c.id === cid);
-      const color = pickedColor(), label = pickedLabel();
-      extOps([{ op: 'xadd', cid, title, start, end, allDay: whole, color, label }], () => {
-        const key = ymd(monday(d));
-        if (extCache[key]) extCache[key].events.push({ title, start, end, allDay: whole, cal: cal ? cal.name : '', cid, color, label });
-      }, `「${title}」を追加しました`);
+  // ---------- 予定を入れる・直すシート（Googleカレンダーのように、画面の下から出す） ----------
+  // カレンダーの上には「下書き」のブロックを出し、時間や色を変えるとその場で動く。
+  // シートを開いたままカレンダーの空いているところをタップすると、下書きがそこへ動く
+  const $sheet = document.createElement('dialog');
+  $sheet.className = 'evsheet';
+  $sheet.setAttribute('aria-label', '予定');
+  document.body.appendChild($sheet);
+  const sheetOpen = () => $sheet.open;
+  const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半'], [120, '2時間'], [180, '3時間']];
+  const ICON = {
+    clock: '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/>',
+    cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    color: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.4-1.2-1.6-1.2-2.9 0-1 .8-1.6 1.9-1.6h2.2c2.3 0 3.8-1.6 3.8-3.6C20.5 6.8 16.7 3.5 12 3.5Z"/><circle cx="7.8" cy="11" r="1"/><circle cx="10.5" cy="7.6" r="1"/><circle cx="14.8" cy="7.6" r="1"/>',
+    pin: '<path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 1 0-13 0c0 5.4 6.5 11 6.5 11Z"/><circle cx="12" cy="10" r="2.3"/>',
+    note: '<path d="M5 6.5h14M5 11.5h14M5 16.5h9"/>',
+    warn: '<path d="M12 4 2.8 19.5h18.4L12 4Z"/><path d="M12 10v4.2M12 17.2v.1"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  };
+  const icon = n => `<svg class="es-ic" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+  const calColor = cid => {
+    for (const c of Object.values(extCache)) for (const e of c.events || []) if (e.cid === cid && /^#[0-9a-f]{6}$/i.test(e.ccol || '')) return e.ccol;
+    return '';
+  };
+  const draftColor = d => {
+    const l = d.label && labelsOf(d.cid).find(x => x.id === d.label);
+    return (l && l.color) || GCAL_HEX[d.color] || calColor(d.cid) || 'var(--accent)';
+  };
+  const hmLabel = (a, b) => `${hm(a)}〜${hm(b)}`;
+  // 色の上に乗せる文字の色（明るい色には黒、暗い色には白）
+  const inkOn = c => {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c || '');
+    if (!m) return '#fff';
+    const [r, g, b] = m.slice(1).map(h => parseInt(h, 16) / 255).map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? '#1b1f24' : '#fff';
+  };
+  const nextHalf = () => { const n = new Date(); return Math.ceil((n.getHours() * 60 + n.getMinutes() + 1) / 30) * 30; };
+  const clampDay = (a, b) => {   // 1日の中におさめる（time 入力は 24:00 を持てないので 23:55 まで）
+    const len = Math.max(15, b - a);
+    a = Math.max(0, Math.min(24 * 60 - 20, a));
+    return [a, Math.min(24 * 60 - 5, a + len)];
+  };
+
+  // 今までの予定から、よく使う名前を候補にする（色・カレンダー・長さもいっしょに）
+  function suggestions(q) {
+    const by = new Map();
+    Object.values(extCache).forEach(c => (c.events || []).forEach(e => {
+      const t = String(e.title || '').trim();
+      if (!t || e._gone || /祝日|holiday/i.test(e.cal || '')) return;
+      const s = by.get(t) || { title: t, n: 0, durs: {}, last: 0 };
+      s.n++;
+      const len = Math.round((e.end - e.start) / 60000);
+      if (!e.allDay) s.durs[len] = (s.durs[len] || 0) + 1;
+      if (e.start > s.last) Object.assign(s, { last: e.start, cid: e.cid, label: e.label || '', color: e.color || '', allDay: e.allDay });
+      by.set(t, s);
+    }));
+    let list = [...by.values()];
+    const k = q.trim();
+    if (k) list = list.filter(s => s.title !== k && s.title.toLowerCase().includes(k.toLowerCase()));
+    list.sort((p, q2) => q2.n - p.n || q2.last - p.last);
+    return list.slice(0, k ? 6 : 8).map(s => {
+      const top = Object.entries(s.durs).sort((p, q2) => q2[1] - p[1])[0];
+      return { ...s, dur: top ? +top[0] : 60 };
     });
-    $form.elements.xa.addEventListener('change', ev => { $form.querySelector('.xtimes').hidden = ev.target.checked; });
-    $form.elements.xc.addEventListener('change', ev => { $form.querySelector('#xpick').innerHTML = pickFor(ev.target.value, null); });
   }
+
+  // その時間に重なっている予定・勉強のコマ
+  function overlaps(d) {
+    if (d.allDay) return [];
+    const day = parse(d.day), s0 = atMin(day, d.a), e0 = atMin(day, d.b), out = [];
+    const c = extCache[ymd(monday(day))];
+    ((c && c.events) || []).forEach((e, n) => {
+      if (e.allDay || e._gone || (d.mode === 'edit' && d.key === ymd(monday(day)) && d.n === n)) return;
+      if (e.start < e0 && e.end > s0) out.push(`「${e.title}」（${msHm(e.start)}〜${msHm(e.end)}）`);
+    });
+    const days = weekDaysOf(day), col = diff(days[0], day);
+    weekEvents(days).forEach(x => {
+      if (x.col !== col || x.a == null || x.p.type !== 'study' || x.done) return;
+      if (x.a < d.b && x.b > d.a) out.push(`勉強のコマ「${evName(x)}」（${hmLabel(x.a, x.b)}）`);
+    });
+    return out;
+  }
+
+  function colorRow(d) {
+    const ls = labelsOf(d.cid);
+    if (ls.length) {
+      const named = ls.filter(l => l.name), plain = ls.filter(l => !l.name);
+      const cur = d.label || '';
+      const chip = l => `<button type="button" class="es-chip${cur === l.id ? ' on' : ''}" data-es="label" data-v="${esc(l.id)}" style="--c:${esc(l.color)}"><i></i>${esc(l.name)}</button>`;
+      const dot = l => `<button type="button" class="es-dot${cur === l.id ? ' on' : ''}" data-es="label" data-v="${esc(l.id)}" style="--c:${esc(l.color)}" aria-label="${esc(l.color)}"></button>`;
+      const plainOn = plain.some(l => l.id === cur);
+      return `<div class="es-chips">${!cur ? `<button type="button" class="es-chip on" style="--c:${calColor(d.cid) || 'var(--border)'}"><i></i>カレンダーの色</button>` : ''}${named.map(chip).join('')}
+        ${plain.length ? `<button type="button" class="es-chip more" data-es="morecolors" aria-expanded="${plainOn || d.moreColors ? 'true' : 'false'}">ほかの色</button>` : ''}</div>
+        ${plain.length ? `<div class="es-dots" ${plainOn || d.moreColors ? '' : 'hidden'}>${plain.map(dot).join('')}</div>` : ''}`;
+    }
+    const cur = d.color || '';
+    return `<div class="es-dots">${!cur ? `<button type="button" class="es-dot on" style="--c:${calColor(d.cid) || 'var(--border)'}" aria-label="カレンダーの色"></button>` : ''}${GCAL_COLORS.filter(([v]) => GCAL_HEX[v]).map(([v, nm]) => `<button type="button" class="es-dot${cur === v ? ' on' : ''}" data-es="color" data-v="${v}" style="--c:${GCAL_HEX[v]}" aria-label="${nm}"></button>`).join('')}</div>`;
+  }
+
+  function sheetHtml() {
+    const d = ui.draft, cals = (S.settings.gcal.read || []).filter(c => !/祝日|holiday/i.test(c.name));
+    const day = parse(d.day), edit = d.mode === 'edit';
+    const sug = edit ? [] : suggestions(d.title || '');
+    const warn = overlaps(d);
+    const len = d.b - d.a;
+    return `<div class="es-grab" data-es="grab"><i></i></div>
+      <div class="es-top">
+        <button type="button" class="icon-btn" data-es="close" aria-label="閉じる">${icon('close')}</button>
+        <span class="es-h">${edit ? '予定を編集' : '予定を追加'}</span>
+        <button type="button" class="btn primary" data-es="save">保存</button>
+      </div>
+      <div class="es-body">
+        <input class="es-title" name="es-title" placeholder="タイトルを追加" value="${esc(d.title || '')}" autocomplete="off" enterkeyhint="done">
+        <div class="es-sugg" ${sug.length ? '' : 'hidden'}>${sug.map((s, i) => `<button type="button" class="es-chip sugg" data-es="sugg" data-i="${i}" style="--c:${esc(draftColor(s))}"><i></i>${esc(s.title)}</button>`).join('')}</div>
+        <div class="es-sec">
+          <div class="es-row">${icon('clock')}<span class="es-lbl">終日</span><label class="es-switch"><input type="checkbox" data-es="allday" ${d.allDay ? 'checked' : ''}><i></i></label></div>
+          <div class="es-row es-when">
+            <span class="es-ic-sp"></span>
+            <label class="es-date"><span>${mdw(day)}</span><input type="date" data-es="date" value="${d.day}" aria-label="日付"></label>
+            ${d.allDay ? '' : `<span class="es-times"><input type="time" step="300" data-es="start" value="${hhmm(d.a)}" aria-label="開始"><span class="es-arrow">→</span><input type="time" step="300" data-es="end" value="${hhmm(d.b)}" aria-label="終了"></span>`}
+          </div>
+          ${d.allDay ? '' : `<div class="es-row es-durs"><span class="es-ic-sp"></span><div class="es-chips">${DUR_CHIPS.map(([m, t]) => `<button type="button" class="es-chip${len === m ? ' on' : ''}" data-es="dur" data-v="${m}">${t}</button>`).join('')}</div></div>`}
+          ${warn.length ? `<div class="es-row es-warn">${icon('warn')}<span>${esc(warn.slice(0, 2).join('、'))}${warn.length > 2 ? ` ほか${warn.length - 2}件` : ''}と重なっています</span></div>` : ''}
+        </div>
+        <div class="es-sec">
+          <div class="es-row">${icon('cal')}${edit
+            ? `<span class="es-calname"><i style="--c:${calColor(d.cid) || 'var(--border)'}"></i>${esc(d.cal || '')}</span>`
+            : `<label class="es-sel"><i style="--c:${calColor(d.cid) || 'var(--border)'}"></i><select data-es="cal" aria-label="カレンダー">${cals.map(c => `<option value="${esc(c.id)}" ${c.id === d.cid ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>`}</div>
+          <div class="es-row es-colors">${icon('color')}<div class="es-colorbox">${colorRow(d)}</div></div>
+        </div>
+        <div class="es-sec">
+          <div class="es-row">${icon('pin')}<input class="es-in" data-es="loc" placeholder="場所を追加" value="${esc(d.loc || '')}" autocomplete="off"></div>
+          <div class="es-row es-top-al">${icon('note')}<textarea class="es-in" data-es="desc" rows="2" placeholder="説明を追加">${esc(d.desc || '')}</textarea></div>
+        </div>
+        ${edit ? `<div class="es-foot">${d.rec ? '<p class="small faint">くり返しの予定です。変更・削除はこの回だけに反映されます。</p>' : ''}<button type="button" class="btn ghost danger" data-es="delete">この予定を削除</button></div>` : ''}
+      </div>`;
+  }
+
+  function drawSheet() {
+    const scroll = $sheet.scrollTop;
+    $sheet.innerHTML = sheetHtml();
+    $sheet.scrollTop = scroll;
+  }
+
+  // カレンダーの上の下書きを、描き直さずに動かす（日や終日が変わったときだけ描き直す）
+  function draftHtml(d, mode) {
+    const lbl = d.allDay ? '終日' : hmLabel(d.a, d.b);
+    const t = `<i class="tm num">${lbl}</i><b>${esc(d.title || '（タイトルなし）')}</b>`;
+    const c = draftColor(d), ink = `--ink:${inkOn(c)}`;
+    if (d.allDay) return `<div class="ev draft chip" data-action="draft" data-day="${d.day}" data-ad="1" style="--c:${c};${ink}" aria-hidden="true">${t}</div>`;
+    const ph = mode === 'day' ? DAY_HPX : HOUR_PX;
+    const a = Math.max(MIN_H * 60, d.a), top = (a - MIN_H * 60) / 60 * ph, hgt = Math.max(14, (d.b - a) / 60 * ph - 2);
+    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}</div>`;
+  }
+  function updateDraft() {
+    const d = ui.draft;
+    if (!d || ui.tab !== 'cal') return;
+    const shown = (ui.calDays || []).some(x => ymd(x) === d.day);
+    if (!shown) {   // 日付を変えて、表示中の週（日）の外に出たら、その週（日）へ移る
+      if (ui.day) ui.day = d.day;
+      else ui.calOffset = weekOf(parse(d.day)) - weekOf(today());
+      render(); return;
+    }
+    const el = $view.querySelector('.ev.draft');
+    if (!el || el.dataset.day !== d.day || el.dataset.ad !== (d.allDay ? '1' : '0')) { render(); return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = draftHtml(d, ui.day ? 'day' : 'week');
+    const n = tmp.firstElementChild;
+    el.style.cssText = n.style.cssText;
+    el.innerHTML = n.innerHTML;
+  }
+  // 下書きが、シートに隠れない位置に来るようにスクロールする
+  function revealDraft() {
+    requestAnimationFrame(() => {
+      const el = $view.querySelector('.ev.draft');
+      if (!el || !sheetOpen()) return;
+      // シートは出てくる途中で動いているので、置き終わった位置で計算する
+      const r = el.getBoundingClientRect(), top = (window.visualViewport ? visualViewport.height : innerHeight) - $sheet.offsetHeight;
+      const headH = 64 + (document.querySelector('.cal-sticky')?.getBoundingClientRect().height || 0);
+      if (r.bottom > top - 12) scrollBy({ top: Math.min(r.bottom - top + 40, r.top - headH - 10), behavior: 'smooth' });
+      else if (r.top < headH) scrollBy({ top: r.top - headH - 20, behavior: 'smooth' });
+    });
+  }
+
+  function openSheet(d) {
+    ui.draft = d;
+    document.body.classList.add('sheet-open');
+    drawSheet();
+    if (!sheetOpen()) $sheet.show();
+    render();
+    revealDraft();
+    if (matchMedia('(pointer: fine)').matches && d.mode === 'add') $sheet.querySelector('.es-title')?.focus();
+  }
+  function closeSheet(force) {
+    if (!sheetOpen()) return true;
+    const d = ui.draft;
+    if (!force && d && d.mode === 'add' && (d.title || d.loc || d.desc) && !confirm('この予定は保存されていません。破棄しますか？')) return false;
+    ui.draft = null;
+    $sheet.close();
+    document.body.classList.remove('sheet-open');
+    render();
+    return true;
+  }
+
+  function newDraft(day, a, b, allDay) {
+    const cals = (S.settings.gcal.read || []).filter(c => !/祝日|holiday/i.test(c.name));
+    if (!cals.length) return null;
+    const pick = cals.find(c => c.id === S.settings.gcal.addCal) || cals[0];
+    [a, b] = clampDay(a, b);
+    return { mode: 'add', day: ymd(day), a, b, allDay: !!allDay, title: '', cid: pick.id, label: '', color: '', loc: '', desc: '' };
+  }
+  function openAdd(day, a, allDay, b) {
+    // シートを開いたまま別の場所をタップしたら、長さはそのままで下書きを動かす
+    if (sheetOpen() && ui.draft && ui.draft.mode === 'add') {
+      const d = ui.draft, len = d.b - d.a;
+      d.day = ymd(day); d.allDay = !!allDay;
+      if (!allDay) [d.a, d.b] = clampDay(a, a + (b != null ? b - a : len));
+      drawSheet(); updateDraft(); revealDraft();
+      return;
+    }
+    if (sheetOpen() && !closeSheet()) return;
+    const d = newDraft(day, a, b != null ? b : a + 60, allDay);
+    if (d) openSheet(d);
+  }
+  function openEdit(key, n) {
+    const e = ((extCache[key] || {}).events || [])[n];
+    if (!e) return;
+    if (sheetOpen() && !closeSheet()) return;
+    const s0 = new Date(e.start);
+    const a = s0.getHours() * 60 + s0.getMinutes();
+    openSheet({
+      mode: 'edit', key, n, day: ymd(s0), a, b: Math.min(24 * 60 - 5, a + Math.round((e.end - e.start) / 60000)), allDay: !!e.allDay,
+      title: e.title, cid: e.cid, cal: e.cal, label: e.label || '', color: e.color || '', loc: e.loc || '', desc: e.desc || '', rec: e.rec,
+      orig: { title: e.title, loc: e.loc || '', desc: e.desc || '', label: e.label || '', color: e.color || '' },
+    });
+  }
+
+  function saveSheet() {
+    const d = ui.draft;
+    if (!d) return;
+    const title = (d.title || '').trim();
+    if (d.mode === 'add' && !title) { toast('タイトルを入れてください'); $sheet.querySelector('.es-title')?.focus(); return; }
+    if (!d.allDay && !(d.b > d.a)) { toast('終わりは始まりより後にしてください'); return; }
+    const day = parse(d.day);
+    let start, end;
+    if (d.allDay) { start = atMin(day, 0); end = atMin(addDays(day, 1), 0); }
+    else { start = atMin(day, d.a); end = atMin(day, d.b); }
+    if (d.mode === 'add') {
+      S.settings.gcal.addCal = d.cid; persist();
+      const cal = (S.settings.gcal.read || []).find(c => c.id === d.cid);
+      const ev = { title, start, end, allDay: d.allDay, cal: cal ? cal.name : '', cid: d.cid, color: d.color, label: d.label, loc: d.loc, desc: d.desc, ccol: calColor(d.cid) };
+      closeSheet(true);
+      extOps([{ op: 'xadd', cid: d.cid, title, start, end, allDay: d.allDay, color: d.color, label: d.label, loc: d.loc, desc: d.desc }], () => {
+        const key = ymd(monday(day));
+        if (extCache[key]) extCache[key].events.push(ev);
+      }, `「${title}」を追加しました`);
+      return;
+    }
+    const e = ((extCache[d.key] || {}).events || [])[d.n];
+    if (!e) { closeSheet(true); return; }
+    const o = d.orig, ops = [], edit = { cid: e.cid, eid: e.eid, start: e.start };
+    const tt = title || e.title, ch = {};
+    if (tt !== o.title) ch.title = tt;
+    if ((d.loc || '') !== o.loc) ch.loc = d.loc || '';
+    if ((d.desc || '') !== o.desc) ch.desc = d.desc || '';
+    if (Object.keys(ch).length) ops.push({ op: 'xedit', ...edit, ...ch });
+    if (d.label && d.label !== o.label) ops.push({ op: 'xlabel', ...edit, label: d.label });
+    else if (d.color && d.color !== o.color) ops.push({ op: 'xcolor', ...edit, color: d.color });
+    if (start !== e.start || end !== e.end) ops.push({ op: 'xmove', ...edit, newStart: start, newEnd: end });
+    closeSheet(true);
+    if (!ops.length) return;
+    extOps(ops, () => {
+      Object.assign(e, { title: tt, start, end, allDay: d.allDay, loc: d.loc, desc: d.desc });
+      if (d.label) e.label = d.label; else if (d.color) e.color = d.color;
+    }, '変更しました');
+  }
+
+  $sheet.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-es]');
+    if (!b) return;
+    const d = ui.draft, k = b.dataset.es;
+    if (!d) return;
+    if (k === 'close') { closeSheet(); return; }
+    if (k === 'save') { saveSheet(); return; }
+    if (k === 'delete') {
+      const e = ((extCache[d.key] || {}).events || [])[d.n];
+      if (!e || !confirm(`「${e.title}」を Google カレンダーから削除します。`)) return;
+      closeSheet(true);
+      extOps([{ op: 'xdel', cid: e.cid, eid: e.eid, start: e.start }], () => { e._gone = true; }, '削除しました');
+      return;
+    }
+    if (k === 'dur') { [d.a, d.b] = clampDay(d.a, d.a + +b.dataset.v); }
+    else if (k === 'label') { d.label = b.dataset.v; d.color = ''; }
+    else if (k === 'color') { d.color = b.dataset.v; d.label = ''; }
+    else if (k === 'morecolors') { d.moreColors = !d.moreColors; }
+    else if (k === 'sugg') {
+      const s = suggestions(d.title || '')[+b.dataset.i];
+      if (!s) return;
+      d.title = s.title;
+      if ((S.settings.gcal.read || []).some(c => c.id === s.cid)) d.cid = s.cid;
+      d.label = s.cid === d.cid ? s.label : ''; d.color = s.cid === d.cid ? s.color : '';
+      d.allDay = !!s.allDay;
+      if (!d.allDay) [d.a, d.b] = clampDay(d.a, d.a + s.dur);
+    } else return;
+    drawSheet(); updateDraft(); revealDraft();
+  });
+  $sheet.addEventListener('input', ev => {
+    const t = ev.target, d = ui.draft;
+    if (!d) return;
+    if (t.classList.contains('es-title')) {
+      d.title = t.value;
+      if (d.mode === 'add') {   // 候補だけ入れ替える（入力中の欄は描き直さない）
+        const sug = suggestions(d.title), box = $sheet.querySelector('.es-sugg');
+        box.hidden = !sug.length;
+        box.innerHTML = sug.map((s, i) => `<button type="button" class="es-chip sugg" data-es="sugg" data-i="${i}" style="--c:${esc(draftColor(s))}"><i></i>${esc(s.title)}</button>`).join('');
+      }
+      updateDraft();
+    } else if (t.dataset.es === 'loc') d.loc = t.value;
+    else if (t.dataset.es === 'desc') d.desc = t.value;
+  });
+  $sheet.addEventListener('change', ev => {
+    const t = ev.target, d = ui.draft, k = t.dataset.es;
+    if (!d || !k) return;
+    if (k === 'allday') d.allDay = t.checked;
+    else if (k === 'date') { if (!t.value) return; d.day = t.value; }
+    else if (k === 'start') { if (!t.value) return; [d.a, d.b] = clampDay(toMin(t.value), toMin(t.value) + (d.b - d.a)); }   // 長さはそのまま
+    else if (k === 'end') { if (!t.value) return; const e1 = toMin(t.value); d.b = e1 > d.a ? e1 : Math.min(24 * 60 - 5, d.a + 30); }
+    else if (k === 'cal') { d.cid = t.value; d.label = ''; d.color = ''; }
+    else return;
+    drawSheet(); updateDraft(); revealDraft();
+  });
+  $sheet.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') { ev.preventDefault(); closeSheet(); }
+    if (ev.key === 'Enter' && ev.target.classList.contains('es-title') && !ev.isComposing) { ev.preventDefault(); ev.target.blur(); }
+  });
+  $sheet.addEventListener('cancel', ev => { ev.preventDefault(); closeSheet(); });
+  // つまみを下へ引っぱると閉じる
+  let grab = null;
+  $sheet.addEventListener('pointerdown', ev => { if (ev.target.closest('.es-grab, .es-h')) grab = { y: ev.clientY, id: ev.pointerId }; });
+  addEventListener('pointermove', ev => {
+    if (!grab || ev.pointerId !== grab.id) return;
+    const dy = Math.max(0, ev.clientY - grab.y);
+    $sheet.style.transform = `translateY(${dy}px)`;
+  });
+  addEventListener('pointerup', ev => {
+    if (!grab || ev.pointerId !== grab.id) return;
+    const dy = ev.clientY - grab.y;
+    grab = null; $sheet.style.transform = '';
+    if (dy > 90) closeSheet();
+  });
+  // キーボードが出たら、その上にシートを持ち上げる
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const fit = () => {
+      document.documentElement.style.setProperty('--kb', `${Math.max(0, innerHeight - vv.height - vv.offsetTop)}px`);
+      document.documentElement.style.setProperty('--vvh', `${vv.height}px`);
+    };
+    vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
+  }
+
+  // 空いているところを長押し（マウスは押したまま）して上下に動かすと、その長さで予定を作る
+  let mk = null;
+  function mkStart() {
+    if (!mk || mk.active) return;
+    clearTimeout(mk.timer);
+    mk.active = true;
+    if (navigator.vibrate) navigator.vibrate(10);
+    if (sheetOpen() && ui.draft && ui.draft.mode !== 'add' && !closeSheet()) { mk = null; return; }
+    const day = ui.calDays[mk.col];
+    if (sheetOpen() && ui.draft) {
+      Object.assign(ui.draft, { day: ymd(day), allDay: false, a: mk.a0, b: mk.a0 + 30 });
+      updateDraft();
+    } else {
+      ui.draft = newDraft(day, mk.a0, mk.a0 + 30, false);
+      if (!ui.draft) { mk = null; return; }
+      render();
+    }
+  }
+  function mkMinute(y) {
+    const cell = $view.querySelectorAll('.cal-body .col')[ui.day ? 0 : mk.col];
+    if (!cell) return mk.a0;
+    return MIN_H * 60 + (y - cell.getBoundingClientRect().top) / hpx * 60;
+  }
+
 
   // ---------- コマが終わったら、音なしで目立たせる（画面全体のお知らせ・振動・タブ名の点滅） ----------
   const finishShown = new Set();
@@ -1040,7 +1389,7 @@
 
   function checkFinished(lookbackMs) {
     if (document.hidden) return;
-    if ($dlg.open || drag || document.querySelector('.finish')) return;   // 閉じたあとに知らせる（時刻は進めない）
+    if ($dlg.open || sheetOpen() || drag || document.querySelector('.finish')) return;   // 閉じたあとに知らせる（時刻は進めない）
     const now = Date.now(), since = lookbackMs ? now - lookbackMs : lastFinishCheck;
     lastFinishCheck = now;
     const t = today();
@@ -1113,7 +1462,7 @@
     swipe = { x: t.clientX, y: t.clientY, at: Date.now() };
   }, { passive: true });
   $view.addEventListener('touchend', e => {
-    if (!swipe || (drag && drag.active) || $dlg.open) { swipe = null; return; }
+    if (!swipe || (drag && drag.active) || (mk && mk.active) || $dlg.open || sheetOpen()) { swipe = null; return; }
     const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     const quick = Date.now() - swipe.at < 700;
     swipe = null;
@@ -1133,12 +1482,34 @@
   const LONG_PRESS = 350;
 
   $view.addEventListener('pointerdown', e => {
+    if (!e.target.closest('.ev') && e.button <= 0 && ui.tab === 'cal' && ui.calDays && extOn()) {
+      const cell = e.target.closest('.cal-body .col');
+      if (cell) {
+        const m = MIN_H * 60 + (e.clientY - cell.getBoundingClientRect().top) / hpx * 60;
+        mk = { id: e.pointerId, mouse: e.pointerType === 'mouse', x0: e.clientX, y0: e.clientY, col: +cell.dataset.col, a0: Math.floor(m / 15) * 15, active: false };
+        if (!mk.mouse) mk.timer = setTimeout(mkStart, LONG_PRESS);
+        return;
+      }
+    }
     const el = e.target.closest('.ev[data-movable]');
     if (!el || e.button > 0 || ui.tab !== 'cal') return;
     drag = { el, id: e.pointerId, mouse: e.pointerType === 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false };
     if (!drag.mouse) drag.timer = setTimeout(startDrag, LONG_PRESS);
   });
   addEventListener('pointermove', e => {
+    if (mk && e.pointerId === mk.id) {
+      if (!mk.active) {
+        const dist = Math.hypot(e.clientX - mk.x0, e.clientY - mk.y0);
+        if (mk.mouse && dist > 4) mkStart();
+        else if (!mk.mouse && dist > 8) { clearTimeout(mk.timer); mk = null; }   // 長押し前に動いた＝スクロール
+        if (!mk || !mk.active) return;
+      }
+      e.preventDefault();
+      const s15 = Math.max(0, Math.min(24 * 60 - 5, Math.round(mkMinute(e.clientY) / 15) * 15));
+      const [a, b] = s15 >= mk.a0 ? [mk.a0, Math.max(mk.a0 + 15, s15)] : [s15, mk.a0 + 15];
+      if (ui.draft && (ui.draft.a !== a || ui.draft.b !== b)) { ui.draft.a = a; ui.draft.b = b; updateDraft(); }
+      return;
+    }
     if (!drag || e.pointerId !== drag.id) return;
     drag.x = e.clientX; drag.y = e.clientY;
     if (!drag.active) {
@@ -1151,15 +1522,28 @@
     placeGhost();
   }, { passive: false });
   addEventListener('pointerup', e => {
+    if (mk && e.pointerId === mk.id) {
+      clearTimeout(mk.timer);
+      const was = mk.active; mk = null;
+      if (!was || !ui.draft) return;
+      dragEndedAt = Date.now();
+      if (sheetOpen()) { drawSheet(); revealDraft(); } else openSheet(ui.draft);
+      return;
+    }
     if (!drag || e.pointerId !== drag.id) return;
     if (drag.active) endDrag(true); else cancelPress();
   });
   addEventListener('pointercancel', e => {
+    if (mk && e.pointerId === mk.id) {
+      clearTimeout(mk.timer);
+      if (mk.active && !sheetOpen()) { ui.draft = null; render(); }
+      mk = null; return;
+    }
     if (!drag || e.pointerId !== drag.id) return;
     if (drag.active) endDrag(false); else cancelPress();
   });
   // ドラッグ中は画面がスクロールしないように
-  addEventListener('touchmove', e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+  addEventListener('touchmove', e => { if ((drag && drag.active) || (mk && mk.active)) e.preventDefault(); }, { passive: false });
   $view.addEventListener('contextmenu', e => { if (e.target.closest('.ev')) e.preventDefault(); });
 
   function cancelPress() {
@@ -1777,14 +2161,22 @@
 
   document.querySelector('.tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
-    if (b) switchTab(b.dataset.tab);
+    if (b && closeSheet()) switchTab(b.dataset.tab);
   });
-  document.querySelector('[data-action="settings"]').addEventListener('click', openSettings);
+  document.querySelector('[data-action="settings"]').addEventListener('click', () => { if (closeSheet()) openSettings(); });
 
   function onAction(el) {
     const a = el.dataset.action;
     const curW = () => ui.week || weekOf(today());
+    if (a === 'draft') { $sheet.querySelector('.es-title')?.focus(); return; }
+    if (sheetOpen() && a !== 'newev' && !closeSheet()) return;   // ほかの操作をしたら、シートは閉じる
     switch (a) {
+      case 'newev': {   // 右下の＋：今日なら次の30分から、それ以外の日は9時から
+        const t = today(), days = ui.calDays || [t];
+        const day = ui.day ? parse(ui.day) : (days.find(x => diff(t, x) === 0) || days[0]);
+        openAdd(day, diff(t, day) === 0 ? Math.min(nextHalf(), 22 * 60) : 9 * 60, false);
+        break;
+      }
       case 'calweek': {
         const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
       }
@@ -1843,7 +2235,7 @@
       if (!day) return;
       if (cell.classList.contains('ad')) { openAdd(day, 9 * 60, true); return; }
       const m = MIN_H * 60 + (e.clientY - cell.getBoundingClientRect().top) / hpx * 60;
-      openAdd(day, Math.floor(m / 30) * 30, false);
+      openAdd(day, Math.floor(m / 30) * 30, false);   // タップした30分の枠から1時間
     }
   });
   $view.addEventListener('keydown', e => {
