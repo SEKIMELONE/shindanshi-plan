@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v43';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v44';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -907,7 +907,7 @@
     const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
     const editing = ui.draft && ui.draft.mode === 'edit' && ui.draft.key === x.key && ui.draft.n === x.n;
     return `<button class="ev ext${col ? ' tint' : ''}${editing ? ' editing' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
-      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}${resizable(x) && !editing ? '<i class="rz top" data-rz="ext" data-edge="top"></i><i class="rz" data-rz="ext"></i>' : ''}</button>`;
+      ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}${resizable(x) && !editing ? '<i class="rz up" data-rz="ext" data-edge="top"></i><i class="rz" data-rz="ext"></i>' : ''}</button>`;
   }
 
   // ---------- 自分のカレンダーの予定を書き換える（動かす・名前・削除・追加） ----------
@@ -1149,7 +1149,7 @@
     if (d.allDay) return `<div class="ev draft chip" data-action="draft" data-day="${d.day}" data-ad="1" style="--c:${c};${ink}" aria-hidden="true">${t}</div>`;
     const ph = mode === 'day' ? DAY_HPX : HOUR_PX;
     const a = Math.max(MIN_H * 60, d.a), top = (a - MIN_H * 60) / 60 * ph, hgt = Math.max(14, (d.b - a) / 60 * ph - 2);
-    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}<i class="rz top" data-rz="draft" data-edge="top"></i><i class="rz" data-rz="draft"></i></div>`;
+    return `<div class="ev draft" data-action="draft" data-day="${d.day}" data-ad="0" style="top:${top.toFixed(1)}px;height:${hgt.toFixed(1)}px;left:2px;width:calc(100% - 5px);--c:${c};${ink}" aria-hidden="true">${t}<i class="rz up" data-rz="draft" data-edge="top"></i><i class="rz" data-rz="draft"></i></div>`;
   }
   function updateDraft() {
     const d = ui.draft;
