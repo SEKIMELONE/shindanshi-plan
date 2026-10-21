@@ -481,3 +481,7 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 .ext-load[hidden] { display: none; }
 .ext-load i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent, #3b82f6); animation: extspin .8s linear infinite; }
 @keyframes extspin { to { transform: rotate(360deg); } }
+
+/* 自分のカレンダーの予定：Googleカレンダーと同じ色で、勉強のコマより淡く */
+.ev.ext.tint { background: color-mix(in srgb, var(--c) 20%, var(--surface)); box-shadow: inset 3px 0 0 var(--c); color: var(--text); }
+.ev.ext.tint b { color: color-mix(in srgb, var(--text) 80%, var(--c)); }

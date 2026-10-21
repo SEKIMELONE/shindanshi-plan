@@ -877,11 +877,16 @@
     return out;
   }
 
+  // Googleカレンダーの予定の色（番号 → 色）。番号がなければカレンダーの色
+  const GCAL_HEX = { 1: '#7986cb', 2: '#33b679', 3: '#8e24aa', 4: '#e67c73', 5: '#f6bf26', 6: '#f4511e', 7: '#039be5', 8: '#616161', 9: '#3f51b5', 10: '#0b8043', 11: '#d50000' };
+  const extColor = e => GCAL_HEX[e.color] || (/^#[0-9a-f]{6}$/i.test(e.ccol || '') ? e.ccol : '');
   function extHtml(x, style, mode) {
+    const col = extColor(x.e);
+    if (col) style = `${style};--c:${col}`;
     const e = x.e, when = e.allDay ? '終日' : `${msHm(e.start)}〜${msHm(e.end)}`;
     const shown = ymd(addDays(parse(x.key), x.col));
     const move = e.eid ? `data-movable="1" data-ext="1" data-day="${shown}" data-a="${x.a ?? ''}" data-dur="${x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"` : '';
-    return `<button class="ev ext" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
+    return `<button class="ev ext${col ? ' tint' : ''}" style="${style}" data-action="ext" data-k="${x.key}" data-n="${x.n}" ${move} aria-label="${esc(`${e.title} ${when}（${e.cal}）`)}">
       ${mode === 'day' && !e.allDay ? `<i class="tm num">${when}</i>` : ''}<b>${esc(e.title)}</b>${mode === 'day' ? `<span>${esc(e.cal)}</span>` : ''}</button>`;
   }
 

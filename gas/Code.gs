@@ -106,7 +106,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 3 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 4 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -131,6 +131,8 @@ function doPost(e) {
           cid: id,
           eid: ev.getId(),
           rec: ev.isRecurringEvent(),
+          color: ev.getColor() || '',   // 予定ごとの色（'1'〜'11'）。カレンダーの色のままなら空
+          ccol: c.getColor(),           // カレンダーの色（#rrggbb）
         });
       });
     });
