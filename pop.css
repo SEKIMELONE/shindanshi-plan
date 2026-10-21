@@ -80,26 +80,14 @@
 [data-design="pop"] .card { border: 2px solid var(--ink); border-radius: var(--radius); box-shadow: var(--pop); }
 [data-design="pop"] .card.flush { overflow: hidden; }
 [data-design="pop"] .btn { border: 2px solid var(--ink); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: var(--pop-sm);
-  transition: transform .14s var(--spring), box-shadow .14s var(--spring); }
+  transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
 [data-design="pop"] .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--ink); }
 [data-design="pop"] .btn.ghost { border-color: transparent; box-shadow: none; background: transparent; color: var(--accent); }
 [data-design="pop"] .btn.danger { color: var(--danger); }
 [data-design="pop"] .btn:not(.ghost):active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
 [data-design="pop"] .btn.primary:active { background: var(--accent); }
 [data-design="pop"] .btn[disabled] { box-shadow: none; }
-@media (hover: hover) {
-  [data-design="pop"] .btn:not(.ghost):not([disabled]):hover { animation: pop-jelly .55s var(--spring) forwards; }
-  [data-design="pop"] .pill:hover, [data-design="pop"] .es-chip:hover { animation: pop-wiggle .4s ease-in-out infinite; }
-  [data-design="pop"] .fab:hover { transform: translateY(-3px) rotate(-6deg) scale(1.06); box-shadow: 6px 6px 0 var(--ink); }
-}
-@keyframes pop-jelly {
-  0% { transform: none; box-shadow: var(--pop-sm); }
-  30% { transform: scale(1.12, .9); }
-  50% { transform: scale(.95, 1.08); }
-  70% { transform: translateY(-2px) scale(1.06) rotate(-2deg); }
-  100% { transform: translateY(-2px) scale(1.04) rotate(-2deg); box-shadow: 4px 4px 0 var(--ink); }
-}
-@keyframes pop-wiggle { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+/* マウスを乗せたときは動かさない。押したときだけ沈んで、離すとバネで戻る */
 [data-design="pop"] .pill { border: 1.5px solid var(--ink); background: var(--surface); color: var(--ink); font-weight: 700; }
 [data-design="pop"] .pill.accent { background: var(--sun); color: #1d1b3a; }
 [data-design="pop"] .pill.now { background: var(--orange); color: #1d1b3a; }
