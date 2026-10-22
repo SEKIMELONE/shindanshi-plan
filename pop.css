@@ -253,5 +253,5 @@
 [data-design="pop"] .ev.ext.tint b { font-weight: 500; color: var(--muted); }
 [data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
 
-/* いまのコマ：Pop の「1画面に1つだけの目立つカード」と同じ、黄色いずらした影で浮かせる */
-[data-design="pop"] .ev.study.is-now:not(.done) { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--sun), 4px 4px 0 2px var(--ink); }
+/* いまのコマ：形はそのまま、枠と影の色だけピンクに変える */
+[data-design="pop"] .ev.study.is-now:not(.done) { border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
