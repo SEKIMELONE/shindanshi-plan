@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v58';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v59';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1010,15 +1010,24 @@
   const $scroll = document.createElement('div');
   $scroll.className = 'es-scroll';
   $panel.appendChild($scroll);
+  // 矢印は SVG で描く。本体の枠線の中心線に根元をそろえ、枠線と同じ太さ・色の線で描くので、継ぎ目なく1本につながる。
+  // 上向きの形を1つだけ作り、出る辺に合わせて回す
+  const AR_B = 12, AR_L = 11;   // 根元の半分の幅、先までの長さ
   const $arrow = document.createElement('i');
   $arrow.className = 'es-pointer'; $arrow.hidden = true; $arrow.setAttribute('aria-hidden', 'true');
+  $arrow.innerHTML = `<svg viewBox="-20 -20 40 40" width="40" height="40">
+    <path class="ar-fill" d="M${-AR_B} 4 L${-AR_B} 0 L0 ${-AR_L} L${AR_B} 0 L${AR_B} 4 Z"/>
+    <path class="ar-line" d="M${-AR_B - 6} 0 L${-AR_B} 0 L0 ${-AR_L} L${AR_B} 0 L${AR_B + 6} 0"/></svg>`;
   $sheet.appendChild($arrow);
   // 入れ物は本体のまわりに透明な余白を持つ（矢印が入れ物の外にはみ出さないように。はみ出しを切るブラウザがあるため）
   const SHEET_PAD = 16;
   // 矢印を、画面上の点 (ax, ay) に置く（入れ物の左上からの位置に直す）
   const setArrow = (side, ax, ay, left, top) => {
+    // 根元は枠線の真ん中の線に置く（外側の縁から枠線の太さの半分だけ内側）
+    const h = ($panel.clientLeft || 1) / 2;
+    const dx = side === 'right' ? h : side === 'left' ? -h : 0, dy = side === 'below' ? h : side === 'above' ? -h : 0;
     $sheet.dataset.side = side; $arrow.dataset.side = side;
-    $arrow.style.left = `${ax - left + SHEET_PAD}px`; $arrow.style.top = `${ay - top + SHEET_PAD}px`;
+    $arrow.style.left = `${ax - left + SHEET_PAD + dx}px`; $arrow.style.top = `${ay - top + SHEET_PAD + dy}px`;
   };
   const sheetOpen = () => $sheet.open;
   const DUR_CHIPS = [[30, '30分'], [60, '1時間'], [90, '1時間半']];
@@ -1234,7 +1243,7 @@
     const anchor = $view.querySelector('.ev.draft');
     const vw = document.documentElement.clientWidth, vh = window.visualViewport ? visualViewport.height : innerHeight;
     const bw = $panel.clientLeft || 0;
-    const W = Math.min(380, vw - 16), H = $scroll.scrollHeight + bw * 2, gap = 12;
+    const W = Math.min(380, vw - 16), H = $scroll.scrollHeight + bw * 2, gap = 15;   // 矢印の先が予定に触れない間隔
     const fit = (left, top, h) => { Object.assign($sheet.style, { left: `${left - SHEET_PAD}px`, top: `${top - SHEET_PAD}px` }); $scroll.style.maxHeight = `${Math.max(120, h - bw * 2)}px`; };
     const topLim = 8, botLim = vh - 8;
     $sheet.style.width = `${W + SHEET_PAD * 2}px`;
