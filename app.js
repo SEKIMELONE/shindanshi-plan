@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v67';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v68';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -2503,8 +2503,6 @@
     clearTimeout(memoTimer); setWk(+e.target.dataset.w, { memo: e.target.value }); save();
   });
 
-  const $top = document.querySelector('.top');
-  addEventListener('scroll', () => $top.classList.toggle('scrolled', scrollY > 4), { passive: true });
 
   // 開きっぱなしでも「今」のコマと日付が進むように
   let lastDay = ymd(today());

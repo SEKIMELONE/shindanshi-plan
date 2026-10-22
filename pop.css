@@ -255,3 +255,7 @@
 
 /* いまのコマ：形はそのまま、枠と影の色だけピンクに変える */
 [data-design="pop"] .ev.study.is-now:not(.done) { border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
+
+[data-design="pop"] .settings-btn { border: 2px solid var(--ink); color: var(--ink); box-shadow: var(--pop-sm); transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
+[data-design="pop"] .settings-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
+@media (hover: hover) { [data-design="pop"] .settings-btn:hover { transform: translate(-1px, -2px) rotate(30deg); box-shadow: 3px 4px 0 var(--ink); transition: transform .25s ease-out, box-shadow .25s ease-out; } }

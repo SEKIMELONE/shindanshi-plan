@@ -77,7 +77,7 @@ button { cursor: pointer; }
 .icon-btn { border: 0; background: transparent; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); }
 .icon-btn:active { background: var(--surface-2); }
 
-main { max-width: 720px; margin: 0 auto; padding: 4px 16px calc(var(--tabs-h) + env(safe-area-inset-bottom) + 28px); outline: none; }
+main { max-width: 720px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 8px) 16px calc(var(--tabs-h) + env(safe-area-inset-bottom) + 28px); outline: none; }
 
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
@@ -154,7 +154,7 @@ main.wide { max-width: 1100px; }
 .calnav .mid .sub { display: block; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal { --gw: 38px; --line: color-mix(in srgb, var(--border) 75%, transparent); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin: 12px -10px 0; overflow: clip; }
 .cal-row { display: grid; grid-template-columns: var(--gw) repeat(7, minmax(0, 1fr)); }
-.cal-sticky { position: sticky; top: calc(52px + env(safe-area-inset-top)); z-index: 4; background: var(--surface); }
+.cal-sticky { position: sticky; top: env(safe-area-inset-top); z-index: 4; background: var(--surface); }
 .cal-head { background: var(--surface); border-bottom: 1px solid var(--border); }
 .cal-weekbar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 0 2px; }
 .cal-weekbar .navbtn { width: 40px; height: 34px; font-size: 18px; }
@@ -225,7 +225,7 @@ body.dragging { -webkit-user-select: none; user-select: none; }
 .dayhead .mid .sub { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dayhead > .btn, .dayhead > .pill { flex: none; min-width: 56px; justify-content: center; }
 .daystrip { display: grid; grid-template-columns: 30px repeat(7, minmax(0, 1fr)) 30px; align-items: center; margin: 4px -10px 10px;
-  position: sticky; top: calc(52px + env(safe-area-inset-top)); z-index: 5; background: color-mix(in srgb, var(--bg) 94%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: 2px 0; }
+  position: sticky; top: env(safe-area-inset-top); z-index: 5; background: color-mix(in srgb, var(--bg) 94%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); padding: 2px 0; }
 .daystrip .navbtn { width: 30px; height: 44px; }
 .ds { border: 0; background: none; padding: 2px 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); min-width: 0; cursor: pointer; }
 .ds span { font-size: 11px; font-weight: 600; }
@@ -245,8 +245,8 @@ body.dragging { -webkit-user-select: none; user-select: none; }
 .cal.day .ev.done small { text-decoration: none; }
 .ev .tm { font-style: normal; font-size: 10px; font-weight: 600; color: var(--muted); }
 .ev.ghost .tm { display: none; }
-.day-side { position: sticky; top: calc(52px + env(safe-area-inset-top) + 72px); display: flex; flex-direction: column; gap: 10px;
-  max-height: calc(100dvh - 52px - env(safe-area-inset-top) - 72px - var(--tabs-h) - env(safe-area-inset-bottom) - 16px); overflow-y: auto; scrollbar-width: none; }
+.day-side { position: sticky; top: calc(env(safe-area-inset-top) + 72px); display: flex; flex-direction: column; gap: 10px;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 72px - var(--tabs-h) - env(safe-area-inset-bottom) - 16px); overflow-y: auto; scrollbar-width: none; }
 .day-side::-webkit-scrollbar { display: none; }
 .card.side { margin: 0; padding: 12px; }
 .side .k { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--muted); }
@@ -638,3 +638,12 @@ dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: tran
 
 /* いまのコマ：形はそのまま、左の線と影の色だけ変える */
 .ev.study.is-now:not(.done) { box-shadow: inset 4px 0 0 var(--now), 0 1px 4px color-mix(in srgb, var(--now) 55%, transparent); }
+
+/* 題名の帯はなくし、設定は右上の丸いボタンだけにする（ページといっしょにスクロールする） */
+.settings-btn { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: max(12px, env(safe-area-inset-right)); z-index: 6;
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border); background: var(--surface); color: var(--muted); box-shadow: var(--shadow); cursor: pointer; }
+.settings-btn:active { background: var(--surface-2); }
+.settings-btn svg { width: 22px; height: 22px; }
+/* 右上のボタンの下に中身がもぐらないよう、最初の行だけ右をあける */
+main::before { content: ""; float: right; width: 46px; height: 40px; }
+@media (min-width: 900px) { .settings-btn { right: max(16px, calc(50% - 560px)); } }
