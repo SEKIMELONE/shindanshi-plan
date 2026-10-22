@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v61';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v62';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -409,7 +409,6 @@
 
     const ranges = SUBJ.slice(0, STUDY_N).map((name, i) => [name, range(w, i)]).filter(([, r]) => r)
       .map(([name, r]) => `<li><span class="dot" style="background:${color(name)}"></span><div><div class="nm">${esc(name)}</div><div class="tx">${esc(r)}</div></div></li>`).join('');
-    const movedN = evs.filter(x => x.moved && !x.carry && x.col >= 0 && x.col < 7).length;
     const carryN = w < N ? evs.filter(x => carryable(x, days)).length : 0;
 
     return `
@@ -441,9 +440,7 @@
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
       <div class="cal-foot">
-        ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
         ${carryN ? `<button class="btn small" data-action="carry-week">終わっていないコマを次の週へ（${carryN}件）</button>` : ''}
-        ${gcalOn() ? `<p class="small faint gsync${S.gsync.err || S.gsync.cerr || S.gsync.xerr ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
       <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
@@ -2202,6 +2199,10 @@
     const st = S.settings;
     const editedN = Object.values(S.ov).reduce((n, m) => n + Object.keys(m).length, 0);
     const movesN = Object.keys(S.moves).length;
+    // いま表示している週の、動かしたコマ（持ち越しは除く。持ち越しはコマの画面の「持ち越しをやめる」で戻す）
+    const wkDays = ui.day ? weekDaysOf(parse(ui.day)) : (ui.calDays && ui.calDays.length === 7 ? ui.calDays : weekDaysOf(today()));
+    const wkKeys = new Set(wkDays.map(ymd));
+    const wkMoves = Object.keys(S.moves).filter(k => wkKeys.has(k.split('|')[0]) && !S.moves[k].carry);
     openDlg(`<h2 class="sticky-head">設定<button class="btn ghost small" data-dlg="cancel" type="button" aria-label="閉じる">✕</button></h2>
       <div class="row2">
         <label class="field"><span>学習開始日</span><input name="start" type="date" value="${esc(st.start)}" required></label>
@@ -2256,7 +2257,8 @@
           <button class="btn small" type="button" data-dlg="export">書き出す</button>
           <button class="btn small" type="button" data-dlg="import">読み込む</button>
           ${editedN ? `<button class="btn small" type="button" data-dlg="reset-ov">計画の編集を元に戻す（${editedN}件）</button>` : ''}
-          ${movesN ? `<button class="btn small" type="button" data-dlg="reset-moves">カレンダーの移動を元に戻す（${movesN}件）</button>` : ''}
+          ${wkMoves.length ? `<button class="btn small" type="button" data-dlg="reset-week-moves">${md(wkDays[0])}〜${md(wkDays[6])}の移動を元に戻す（${wkMoves.length}件）</button>` : ''}
+          ${movesN ? `<button class="btn small" type="button" data-dlg="reset-moves">カレンダーの移動をすべて元に戻す（${movesN}件）</button>` : ''}
           <button class="btn small danger" type="button" data-dlg="wipe">記録をすべて消す</button>
         </div>
       </div>
@@ -2308,6 +2310,10 @@
       if (act === 'reset-ov') {
         if (!confirm('計画・時間割・ガントチャートの編集を、スプレッドシートの内容に戻します。勉強時間の記録とメモは残ります。')) return false;
         S.ov = blank().ov; save(); render(); toast('元に戻しました'); return;
+      }
+      if (act === 'reset-week-moves') {
+        wkMoves.forEach(k => { delete S.moves[k]; });
+        save(); render(); toast(`${md(wkDays[0])}〜${md(wkDays[6])}の移動を元に戻しました`); return;
       }
       if (act === 'reset-moves') {
         if (!confirm('カレンダーで動かしたコマを、すべて時間割どおりの位置に戻します。')) return false;
