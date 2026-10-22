@@ -655,3 +655,6 @@ body.bar-hidden .tabs { transform: translateY(100%); }
 body.bar-hidden .fab { bottom: calc(env(safe-area-inset-bottom) + 18px); }
 body.bar-hidden .ext-load { bottom: calc(env(safe-area-inset-bottom) + 20px); }
 @media (prefers-reduced-motion: reduce) { .tabs, .fab, .ext-load { transition: none; } }
+/* 日の画面の見出し：左は空き（中央の日付がまん中に来るよう、右のボタンと同じ幅） */
+.dayhead .dh-sp { width: 56px; flex: none; }
+.btn.today-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

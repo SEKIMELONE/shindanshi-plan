@@ -259,3 +259,4 @@
 [data-design="pop"] .settings-btn { border: 2px solid var(--ink); color: var(--ink); box-shadow: var(--pop-sm); transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
 [data-design="pop"] .settings-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
 @media (hover: hover) { [data-design="pop"] .settings-btn:hover { transform: translate(-1px, -2px) rotate(30deg); box-shadow: 3px 4px 0 var(--ink); transition: transform .25s ease-out, box-shadow .25s ease-out; } }
+[data-design="pop"] .btn.today-on { background: var(--accent); border-color: var(--ink); color: var(--accent-ink); }

@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v70';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v71';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -532,7 +532,8 @@
 
     const strip = days.map((x, k) => {
       const h = all.filter(e => e.col === k && e.done).reduce((n, e) => n + e.hours, 0);
-      return `<button class="ds${k === col ? ' sel' : ''}${diff(t, x) === 0 ? ' today' : ''}" data-action="dayjump" data-d="${ymd(x)}" aria-label="${mdw(x)}"${k === col ? ' aria-current="date"' : ''}>
+      // 表示中の日をもう一度押すと、週の表示に戻る
+      return `<button class="ds${k === col ? ' sel' : ''}${diff(t, x) === 0 ? ' today' : ''}" data-action="${k === col ? 'dayback' : 'dayjump'}" data-d="${ymd(x)}" aria-label="${mdw(x)}"${k === col ? ' aria-current="date"' : ''}>
         <span>${DAYS[x.getDay()]}</span><b class="num">${x.getDate()}</b><i>${h > 0 ? '●' : ''}</i></button>`;
     }).join('');
 
@@ -618,9 +619,9 @@
 
     return `
       <div class="dayhead">
-        <button class="btn ghost small" data-action="dayback">‹ 週</button>
+        <span class="dh-sp" aria-hidden="true"></span>
         <div class="mid"><b>${mdw(d)}</b><span class="sub">第${w}週 · ${esc(W(w).phase)}</span></div>
-        ${isT ? '<span class="pill accent">今日</span>' : '<button class="btn ghost small" data-action="daytoday">今日</button>'}
+        ${isT ? '<button class="btn small today-on" data-action="dayback" aria-pressed="true" title="週の表示に戻る">今日</button>' : '<button class="btn ghost small" data-action="daytoday">今日</button>'}
       </div>
       <div class="daystrip">
         <button class="navbtn" data-action="dayshift" data-v="-1" aria-label="前の日">‹</button>${strip}<button class="navbtn" data-action="dayshift" data-v="1" aria-label="次の日">›</button>
