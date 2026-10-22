@@ -253,8 +253,6 @@
 [data-design="pop"] .ev.ext.tint b { font-weight: 500; color: var(--muted); }
 [data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
 
-/* いまのコマ：科目の色を濃くして白い文字に（枠と影はほかのコマと同じ） */
-[data-design="pop"] .ev.study.is-now:not(.done) { background: color-mix(in srgb, var(--c) 50%, #1d1b3a); color: #fff; box-shadow: 2px 2px 0 var(--ink); }
-[data-design="pop"] .ev.study.is-now:not(.done) b { color: #fff; }
-[data-design="pop"] .ev.study.is-now:not(.done) span, [data-design="pop"] .ev.study.is-now:not(.done) small, [data-design="pop"] .ev.study.is-now:not(.done) .tm { color: rgba(255, 255, 255, .85); }
-[data-design="pop"] .ev.study.is-now:not(.done)::after { box-shadow: 0 0 0 1.5px #1d1b3a; }
+/* いまのコマ：経った分を濃い斜めのしま模様で（枠と影はほかのコマと同じ） */
+[data-design="pop"] .ev.study.is-now:not(.done) {
+  background: repeating-linear-gradient(135deg, rgba(29, 27, 58, .45) 0 3px, rgba(29, 27, 58, .15) 3px 7px) top / 100% calc(var(--p, 0) * 100%) no-repeat, var(--c); }
