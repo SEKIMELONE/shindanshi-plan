@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v65';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v66';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -348,10 +348,7 @@
       const tk = evTask(x), rng = x.p.type === 'study' ? evRange(x) : '';
       inner = `${x.a == null ? '' : `<i class="tm num">${hm(x.a)}〜${hm(x.b)}</i>`}<b>${esc(evName(x))}</b>${tk ? `<span>${esc(tk)}</span>` : ''}${rng ? `<small>${esc(rng)}</small>` : ''}`;
     }
-    // いまのコマは、経った分（上から）を斜めのしま模様で見せる。--p は 0〜1（1分ごとに進める）
-    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-    const prog = isNow && x.a != null ? `;--p:${Math.max(0, Math.min(1, (nowMin - x.a) / (x.b - x.a))).toFixed(3)}" data-pa="${x.a}" data-pb="${x.b}` : '';
-    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}${prog}" data-action="slot" data-u="${x.uid}" data-d="${x.key}"
+    return `<button class="${cls}" style="${style}${x.c ? `;--c:${x.c}` : ''}" data-action="slot" data-u="${x.uid}" data-d="${x.key}"
       ${movable ? `data-movable="1" data-dur="${x.flex ? (x.u.dur || POMO) : x.a == null ? 0 : x.b - x.a}" data-allday="${x.a == null ? 1 : 0}"${x.flex ? ' data-flex="1"' : ''}` : ''} aria-label="${esc(label)}">${inner}</button>`;
   }
 
@@ -1636,14 +1633,6 @@
   }
 
   setInterval(() => checkFinished(0), 1000);
-  // いまのコマのしま模様（経った分）を進める
-  setInterval(() => {
-    const n = new Date(), m = n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
-    document.querySelectorAll('.ev.is-now[data-pa]').forEach(el => {
-      const a = +el.dataset.pa, b = +el.dataset.pb;
-      el.style.setProperty('--p', Math.max(0, Math.min(1, (m - a) / (b - a))).toFixed(3));
-    });
-  }, 15000);
   // アプリを閉じている間に終わったコマも、30分以内なら開いたときに知らせる
   document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => checkFinished(30 * 60000), 300); });
   setTimeout(() => checkFinished(30 * 60000), 1500);
