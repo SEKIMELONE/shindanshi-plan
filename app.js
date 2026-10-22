@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v59';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v60';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1510,11 +1510,20 @@
     if (ev.key === 'Enter' && ev.target.classList.contains('es-title') && !ev.isComposing) { ev.preventDefault(); ev.target.blur(); }
   });
   $sheet.addEventListener('cancel', ev => { ev.preventDefault(); closeSheet(); });
-  // 吹き出しの外をタップしたら閉じる（カレンダーの中のタップは、下書きを動かす・別の予定を開く側で扱う）
+  // 吹き出しが出ているときに外を触ったら、吹き出しを閉じるだけにする（下の予定・空き時間・タブなどの操作はしない）。
+  // ただしカレンダー上の下書き（端を引っぱって長さを変える・タップでタイトルへ）はそのまま使える
+  let swallowUntil = 0;
   document.addEventListener('pointerdown', ev => {
-    if (!sheetOpen() || $sheet.contains(ev.target)) return;
-    if (ev.target.closest('#view .cal-body .col, #view .cal-allday .ad, #view .ev, .tabs, [data-action="settings"]')) return;
+    if (!sheetOpen()) { swallowUntil = 0; return; }   // 閉じたあとの次のタップは、ふつうに効く
+    if ($sheet.contains(ev.target) || ev.target.closest('.ev.draft')) return;
+    ev.stopPropagation(); ev.preventDefault();
+    swallowUntil = Date.now() + 700;   // このあと来る click も止める
     closeSheet();
+  }, true);
+  document.addEventListener('click', ev => {
+    if (Date.now() > swallowUntil || $sheet.contains(ev.target)) return;
+    ev.stopPropagation(); ev.preventDefault();
+    swallowUntil = 0;
   }, true);
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet(); });
   // キーボードが出たら、その上にシートを持ち上げる
