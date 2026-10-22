@@ -135,7 +135,7 @@
 [data-design="pop"] .ev.ext b { font-weight: 700; }
 [data-design="pop"] .ev.done { background: color-mix(in srgb, var(--c, var(--border)) 12%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 [data-design="pop"] .ev.done::after { color: var(--good); font-weight: 900; }
-[data-design="pop"] .ev.is-now { outline: 2.5px solid var(--accent); outline-offset: 1px; box-shadow: var(--pop-sm); z-index: 3; }
+[data-design="pop"] .ev.is-now { z-index: 3; }
 [data-design="pop"] .ev.carry { border-style: dashed; outline: 0; }
 [data-design="pop"] .ev.ghost { box-shadow: var(--pop); border: 2px solid var(--ink); transform: rotate(-2deg); }
 [data-design="pop"] .ev.draft { border: 2px solid var(--ink); box-shadow: var(--pop-sm); }
@@ -252,3 +252,7 @@
 [data-design="pop"] .ev.ext.tint { background: color-mix(in srgb, var(--c) 14%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--c) 50%, transparent); box-shadow: none; }
 [data-design="pop"] .ev.ext.tint b { font-weight: 500; color: var(--muted); }
 [data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
+
+/* いまのコマ：太い枠のすぐ外にピンクの輪。ずらした影も輪ごと落とす（角の丸みと影の位置がそろう） */
+[data-design="pop"] .ev.study.is-now:not(.done) { box-shadow: 0 0 0 3px var(--accent), 3px 3px 0 3px var(--ink); animation: pop-now 2s ease-in-out infinite; }
+@keyframes pop-now { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, var(--surface)), 3px 3px 0 3px var(--ink); } }
