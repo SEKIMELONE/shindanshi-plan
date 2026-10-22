@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v69';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v70';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -2503,6 +2503,16 @@
     clearTimeout(memoTimer); setWk(+e.target.dataset.w, { memo: e.target.value }); save();
   });
 
+
+  // 下へ読み進める（指を上にはらう）と下のタブを隠し、少しでも戻る（指を下にはらう）と出す。いちばん上・いちばん下では出しておく
+  let lastY = scrollY;
+  addEventListener('scroll', () => {
+    const y = scrollY, dy = y - lastY;
+    if (Math.abs(dy) < 6) return;
+    const atEdge = y < 40 || y + innerHeight >= document.documentElement.scrollHeight - 4;
+    document.body.classList.toggle('bar-hidden', dy > 0 && !atEdge && !sheetOpen() && !$dlg.open);
+    lastY = y;
+  }, { passive: true });
 
   // 開きっぱなしでも「今」のコマと日付が進むように
   let lastDay = ymd(today());

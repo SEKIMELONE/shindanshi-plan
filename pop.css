@@ -220,7 +220,7 @@
 [data-design="pop"] .es-sel i, [data-design="pop"] .es-calname i { box-shadow: 0 0 0 1.5px var(--ink); }
 
 /* 右下の＋・お知らせ・読み込み中 */
-[data-design="pop"] .fab { background: var(--sun); color: #1d1b3a; border: 2px solid var(--ink); border-radius: 50%; box-shadow: var(--pop); transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
+[data-design="pop"] .fab { background: var(--sun); color: #1d1b3a; border: 2px solid var(--ink); border-radius: 50%; box-shadow: var(--pop); transition: transform .3s var(--spring), box-shadow .3s var(--spring), bottom .28s cubic-bezier(.2, .8, .2, 1); }
 [data-design="pop"] .fab:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
 [data-design="pop"] .fab svg { stroke-width: 3; }
 [data-design="pop"] #toast { background: var(--ink); color: var(--bg); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--sun); font-weight: 700; }

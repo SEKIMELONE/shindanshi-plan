@@ -647,3 +647,11 @@ dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: tran
 /* 右上のボタンの下に中身がもぐらないよう、最初の行だけ右をあける */
 main::before { content: ""; float: right; width: 46px; height: 40px; }
 @media (min-width: 900px) { .settings-btn { right: max(16px, calc(50% - 560px)); } }
+
+/* 下のタブ：読み進めている間は下に隠す（右下の＋と読み込み中の表示もいっしょに下がる） */
+.tabs { transition: transform .28s cubic-bezier(.2, .8, .2, 1); }
+body.bar-hidden .tabs { transform: translateY(100%); }
+.fab, .ext-load { transition: bottom .28s cubic-bezier(.2, .8, .2, 1); }
+body.bar-hidden .fab { bottom: calc(env(safe-area-inset-bottom) + 18px); }
+body.bar-hidden .ext-load { bottom: calc(env(safe-area-inset-bottom) + 20px); }
+@media (prefers-reduced-motion: reduce) { .tabs, .fab, .ext-load { transition: none; } }
