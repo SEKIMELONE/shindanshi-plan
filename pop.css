@@ -253,6 +253,8 @@
 [data-design="pop"] .ev.ext.tint b { font-weight: 500; color: var(--muted); }
 [data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
 
-/* いまのコマ：太い枠のすぐ外にピンクの輪。ずらした影も輪ごと落とす（角の丸みと影の位置がそろう） */
-[data-design="pop"] .ev.study.is-now:not(.done) { box-shadow: 0 0 0 3px var(--accent), 3px 3px 0 3px var(--ink); animation: pop-now 2s ease-in-out infinite; }
-@keyframes pop-now { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, var(--surface)), 3px 3px 0 3px var(--ink); } }
+/* いまのコマ：科目の色を濃くして白い文字に（枠と影はほかのコマと同じ） */
+[data-design="pop"] .ev.study.is-now:not(.done) { background: color-mix(in srgb, var(--c) 50%, #1d1b3a); color: #fff; box-shadow: 2px 2px 0 var(--ink); }
+[data-design="pop"] .ev.study.is-now:not(.done) b { color: #fff; }
+[data-design="pop"] .ev.study.is-now:not(.done) span, [data-design="pop"] .ev.study.is-now:not(.done) small, [data-design="pop"] .ev.study.is-now:not(.done) .tm { color: rgba(255, 255, 255, .85); }
+[data-design="pop"] .ev.study.is-now:not(.done)::after { box-shadow: 0 0 0 1.5px #1d1b3a; }

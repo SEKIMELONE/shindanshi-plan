@@ -636,7 +636,9 @@ dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: tran
 .ev.ext.tint { background: color-mix(in srgb, var(--c) 12%, var(--surface)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c) 65%, transparent); }
 .ev.ext.tint b { font-weight: 500; color: var(--muted); }
 
-/* いまのコマ：枠の外側に、角の丸みに沿った色の輪をつける（outline は角や影とずれるので使わない）。輪はゆっくり明るくなったり暗くなったりする */
-.ev.study.is-now:not(.done) { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--c) 60%, #000), 0 0 0 2px var(--surface), 0 0 0 4px var(--now), 0 3px 10px rgba(0,0,0,.25); animation: now-ring 2s ease-in-out infinite; }
-@keyframes now-ring { 50% { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--c) 60%, #000), 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--now) 45%, transparent), 0 3px 10px rgba(0,0,0,.25); } }
-@media (prefers-reduced-motion: reduce) { .ev.study.is-now:not(.done) { animation: none; } }
+/* いまのコマ：同じ科目の色を濃くして白い文字にし、右上で白い点がゆっくり点滅する（形や影はほかのコマと同じ） */
+.ev.study.is-now:not(.done) { background: color-mix(in srgb, var(--c) 55%, #10131a); color: #fff; }
+.ev.study.is-now:not(.done) b { color: #fff; }
+.ev.study.is-now:not(.done) span, .ev.study.is-now:not(.done) small, .ev.study.is-now:not(.done) .tm { color: rgba(255, 255, 255, .85); }
+.ev.study.is-now:not(.done)::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: live 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ev.study.is-now:not(.done)::after { animation: none; } }
