@@ -243,3 +243,12 @@
 [data-design="pop"] .sticky-actions { padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
 /* 予定の吹き出しの入れ物は透明。枠線・影は中の本体（.es-panel）に付ける */
 [data-design="pop"] dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* 勉強のコマ：科目の色でべた塗り、太い枠とずらした影で前に出す。ふつうの予定：淡い色と細い枠で後ろに */
+[data-design="pop"] .ev.study:not(.done) { background: var(--c); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); color: #1d1b3a; }
+[data-design="pop"] .ev.study:not(.done) b { color: #1d1b3a; font-weight: 900; }
+[data-design="pop"] .ev.study:not(.done) span, [data-design="pop"] .ev.study:not(.done) small, [data-design="pop"] .ev.study:not(.done) .tm { color: rgba(29, 27, 58, .8); }
+[data-design="pop"] .ev.study.moved:not(.done)::before { color: rgba(29, 27, 58, .7); }
+[data-design="pop"] .ev.ext.tint { background: color-mix(in srgb, var(--c) 14%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--c) 50%, transparent); box-shadow: none; }
+[data-design="pop"] .ev.ext.tint b { font-weight: 500; color: var(--muted); }
+[data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }

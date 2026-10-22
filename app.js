@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v60';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v61';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -441,7 +441,6 @@
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
       <div class="cal-foot">
-        <p class="small faint">日付をタップでその日のページ。コマをタップで詳細と「終わった」。${matchMedia('(pointer: coarse)').matches ? '長押しして' : ''}ドラッグで、この週の中で動かせます（講義は固定）。${extOn() ? '空いているところをタップで予定を追加。' : ''}</p>
         ${movedN ? `<button class="btn ghost small" data-action="unmove-week">移動を元に戻す（${movedN}件）</button>` : ''}
         ${carryN ? `<button class="btn small" data-action="carry-week">終わっていないコマを次の週へ（${carryN}件）</button>` : ''}
         ${gcalOn() ? `<p class="small faint gsync${S.gsync.err || S.gsync.cerr || S.gsync.xerr ? ' warn' : ''}" data-gsync>${esc(syncNoteText())}</p>` : ''}

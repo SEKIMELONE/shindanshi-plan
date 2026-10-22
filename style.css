@@ -627,3 +627,11 @@ body:has(.ev.resizing), body:has(.ev.resizing) * { cursor: ns-resize !important;
 .es-until .es-sel { flex: 1; min-width: 150px; }
 .es-until .es-sel select { font-size: 14px; }
 dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* 勉強のコマと、ふつうの予定（Googleカレンダー）の差をはっきりさせる：
+   勉強は色を濃く・太字・影つき、ふつうの予定は淡く・細い字で後ろに引っこめる */
+.ev.study:not(.done) { background: color-mix(in srgb, var(--c) 85%, var(--surface)); box-shadow: inset 4px 0 0 color-mix(in srgb, var(--c) 60%, #000), 0 1px 3px rgba(0,0,0,.2); color: #15181d; }
+.ev.study:not(.done) b { font-weight: 800; color: #15181d; }
+.ev.study:not(.done) span, .ev.study:not(.done) small, .ev.study:not(.done) .tm { color: rgba(21, 24, 29, .78); }
+.ev.ext.tint { background: color-mix(in srgb, var(--c) 12%, var(--surface)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c) 65%, transparent); }
+.ev.ext.tint b { font-weight: 500; color: var(--muted); }
