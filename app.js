@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v68';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v69';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1139,7 +1139,7 @@
           <div class="es-row es-when">
             <span class="es-ic-sp"></span>
             <label class="es-date"><span>${mdw(day)}</span><input type="date" data-es="date" value="${d.day}" aria-label="日付"></label>
-            <span class="es-times"><input type="time" step="300" data-es="start" value="${hhmm(d.a)}" aria-label="開始"><span class="es-arrow">→</span><input type="time" step="300" data-es="end" value="${hhmm(d.b)}" aria-label="終了"></span>
+            <span class="es-times"><input type="time" step="600" data-es="start" value="${hhmm(d.a)}" aria-label="開始"><span class="es-arrow">→</span><input type="time" step="600" data-es="end" value="${hhmm(d.b)}" aria-label="終了"></span>
           </div>
           <div class="es-col"><div class="es-col-in">
             <div class="es-row es-durs"><span class="es-ic-sp"></span><div class="es-chips">${DUR_CHIPS.map(([m, t]) => `<button type="button" class="es-chip${len === m ? ' on' : ''}" data-es="dur" data-v="${m}">${t}</button>`).join('')}</div></div>
@@ -1666,7 +1666,7 @@
 
   // ---------- 下の端を引っぱって長さを変える（Googleカレンダーと同じ） ----------
   let rz = null;
-  const RZ_SNAP = 5;   // 長さを変えるのは5分刻み
+  const RZ_SNAP = 10;   // 長さを変えるのは10分刻み（動かすのと同じ）
   $view.addEventListener('pointerdown', e => {
     const h = e.target.closest('.rz');
     if (!h || e.button > 0) return;
@@ -1688,7 +1688,7 @@
     if (!rz || e.pointerId !== rz.id) return;
     e.preventDefault();
     const m = Math.round((MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60) / RZ_SNAP) * RZ_SNAP;
-    // 上の端は始まり、下の端は終わりを動かす（5分刻み、5分より短くはしない）
+    // 上の端は始まり、下の端は終わりを動かす（10分刻み、10分より短くはしない）
     const a = rz.top ? Math.max(MIN_H * 60, Math.min(rz.b - RZ_SNAP, m)) : rz.a;
     const b = rz.top ? rz.b : Math.max(rz.a + RZ_SNAP, Math.min(24 * 60 - 5, m));
     if (a === rz.a && b === rz.b) return;
@@ -1720,7 +1720,7 @@
       const cell = e.target.closest('.cal-body .col');
       if (cell) {
         const m = MIN_H * 60 + (e.clientY - cell.getBoundingClientRect().top) / hpx * 60;
-        mk = { id: e.pointerId, mouse: e.pointerType === 'mouse', x0: e.clientX, y0: e.clientY, col: +cell.dataset.col, a0: Math.floor(m / 15) * 15, active: false };
+        mk = { id: e.pointerId, mouse: e.pointerType === 'mouse', x0: e.clientX, y0: e.clientY, col: +cell.dataset.col, a0: Math.floor(m / 10) * 10, active: false };
         if (!mk.mouse) mk.timer = setTimeout(mkStart, LONG_PRESS);
         return;
       }
@@ -1739,8 +1739,8 @@
         if (!mk || !mk.active) return;
       }
       e.preventDefault();
-      const s5 = Math.max(0, Math.min(24 * 60 - 5, Math.round(mkMinute(e.clientY) / 5) * 5));
-      const [a, b] = s5 >= mk.a0 ? [mk.a0, Math.max(mk.a0 + 15, s5)] : [s5, mk.a0 + 15];
+      const s10 = Math.max(0, Math.min(24 * 60 - 10, Math.round(mkMinute(e.clientY) / 10) * 10));
+      const [a, b] = s10 >= mk.a0 ? [mk.a0, Math.max(mk.a0 + 10, s10)] : [s10, mk.a0 + 10];
       if (ui.draft && (ui.draft.a !== a || ui.draft.b !== b)) { ui.draft.a = a; ui.draft.b = b; updateDraft(); }
       return;
     }
