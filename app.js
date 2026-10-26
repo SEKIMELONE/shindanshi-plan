@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v75';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v76';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -269,7 +269,7 @@
     const mv = getMove(key, u);
     const carry = !!(mv && mv.carry), flex = !!u.flex || carry;
     const a = flex ? (mv && mv.a != null ? mv.a : null) : (u.a0 == null ? null : (mv && mv.a != null ? mv.a : u.a0));
-    const mark = (u.extra ? '（追加）' : u.k != null ? '①②③④'[u.k] : '') + (carry ? '（持ち越し）' : '');
+    const mark = u.extra ? '（追加）' : u.k != null ? '①②③④'[u.k] : '';   // 持ち越しかどうかは見た目で区別しない（コマの画面にだけ書く）
     return {
       s, u, uid: u.uid, w, date, key, text, p, idxs, subjName, short: short + mark, task, c, flex, carry,
       // 分ける前に90分ごと記録したものは、実際にやった90分のまま数える（3つで1.5h）
@@ -351,7 +351,7 @@
   // mode: 'chip'（週表示の終日）／'week'（週表示）／'day'（日表示）
   function evHtml(x, style, isNow, mode = 'week') {
     const movable = x.p.type === 'study';
-    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : '', x.carry ? 'carry' : '', ui.sel.has(`${x.key}|${x.uid}`) ? 'picked' : ''].join(' ');
+    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : '', ui.sel.has(`${x.key}|${x.uid}`) ? 'picked' : ''].join(' ');
     const when = x.a == null ? '' : ` ${hm(x.a)}〜${hm(x.b)}`;
     const label = `${mdw(x.shown)}${when} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}${x.moved ? '（移動済み）' : ''}`;
     let inner = `<b>${esc(x.short)}</b>${x.task && mode === 'week' ? `<span>${esc(x.task)}</span>` : ''}`;
@@ -391,15 +391,19 @@
     const head = days.map((d, k) =>
       `<button class="dh${k === todayCol ? ' today' : ''}" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の予定を開く"><span class="dw">${DAYS[d.getDay()]}</span><span class="dn num">${d.getDate()}</span><span class="dhrs num">${dayH[k] > 0 ? `${fmtH(dayH[k])}h` : ''}</span></button>`).join('');
 
+    // 終日の段：多い日は AD_LIMIT 件だけ出し、残りは「＋N」にたたむ。押すと全部の日がひらく（プルダウン）
+    const AD_LIMIT = 3;
+    const adItems = days.map((d, k) => evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip'))
+      .concat(exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip'))));
+    const adOver = adItems.some(a => a.length > AD_LIMIT);
     const allday = days.map((d, k) => {
-      const mine = evs.filter(x => x.col === k && x.a == null);
-      const carried = mine.filter(x => x.carry), rest = mine.filter(x => !x.carry);
-      // 持ち越しが多い日は2件だけ出して、残りはまとめる（タップでその日のページ）
-      const more = carried.length > 2
-        ? `<button class="ev study carry more" data-action="openday" data-d="${ymd(d)}" aria-label="${mdw(d)}の持ち越し ほか${carried.length - 2}件"><b>持ち越し＋${carried.length - 2}</b></button>` : '';
+      const items = adItems[k];
       const dr = ui.draft && ui.draft.allDay && ui.draft.day === ymd(d) ? draftHtml(ui.draft, 'week') : '';
-      return `<div class="ad" data-col="${k}">${rest.concat(carried.slice(0, 2)).map(x => evHtml(x, '', false, 'chip')).join('')}${more}${exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip')).join('')}${dr}</div>`;
+      const shown = ui.adOpen || items.length <= AD_LIMIT ? items
+        : items.slice(0, AD_LIMIT - 1).concat(`<button class="ad-more" data-action="adtoggle" aria-label="${mdw(d)}の終日 ほか${items.length - AD_LIMIT + 1}件を表示">＋${items.length - AD_LIMIT + 1}</button>`);
+      return `<div class="ad" data-col="${k}">${shown.join('')}${dr}</div>`;
     }).join('');
+    const adGutter = adOver ? `<button class="ad-tog" data-action="adtoggle" aria-expanded="${!!ui.adOpen}" aria-label="終日の段を${ui.adOpen ? 'たたむ' : 'ひらく'}">終日<i>${ui.adOpen ? '▴' : '▾'}</i></button>` : '終日';
 
     const hours = [];
     for (let h = MIN_H + 1; h < MAX_H; h++) hours.push(`<span class="hl num" style="top:${(h - MIN_H) * HOUR_PX}px">${h}:00</span>`);
@@ -447,7 +451,7 @@
           </div>
           <div class="cal-row cal-head"><div class="gutter"></div>${head}</div>
         </div>
-        <div class="cal-row cal-allday"><div class="gutter">終日</div>${allday}</div>
+        <div class="cal-row cal-allday"><div class="gutter">${adGutter}</div>${allday}</div>
         <div class="cal-row cal-body" style="height:${(MAX_H - MIN_H) * HOUR_PX}px"><div class="gutter">${hours.join('')}</div>${cols}</div>
       </div>
       <div class="cal-foot">
@@ -2544,6 +2548,7 @@
         toast(!n ? '変えられるコマがありませんでした' : a === 'sel-done' ? `${n}件を「終わった」にしました（＋${fmtGain(h)}）` : a === 'sel-carry' ? `${n}件を次の週へ持ち越しました` : `${n}件を元の時間に戻しました`);
         break;
       }
+      case 'adtoggle': ui.adOpen = !ui.adOpen; render(); break;
       case 'carry-week': {
         const days = ui.calDays || [];
         const list = weekEvents(days).filter(x => carryable(x, days));

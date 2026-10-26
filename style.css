@@ -186,7 +186,6 @@ button.dh:active .dn, button.dh:hover .dn { box-shadow: 0 0 0 2px var(--surface-
 .ad .ev.ghost { order: 99; }
 .ev .gt { font-style: normal; font-size: 10px; font-weight: 700; color: var(--text); }
 .ev .gt:empty { display: none; }
-.ev.carry { outline: 1.5px dashed var(--c, var(--border)); outline-offset: -1.5px; }
 .ev.moved::before { content: "↷"; position: absolute; right: 3px; top: 1px; font-size: 10px; color: var(--muted); }
 body.dragging, body.dragging * { cursor: grabbing !important; }
 body.dragging { -webkit-user-select: none; user-select: none; }
@@ -672,3 +671,8 @@ body.bar-hidden .ext-load { bottom: calc(env(safe-area-inset-bottom) + 20px); }
 body.bar-hidden .selbar { bottom: calc(env(safe-area-inset-bottom) + 14px); }
 .selbar ~ .fab { display: none; }
 .ev.ghost.follower { opacity: .9; pointer-events: none; }
+
+/* 終日の段：多いときは「＋N」でたたみ、左の「終日 ▾」でひらく・たたむ */
+.ad-tog { border: 0; background: none; padding: 0; font: inherit; font-size: 10px; color: var(--muted); cursor: pointer; display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.ad-tog i { font-style: normal; font-size: 11px; color: var(--accent); }
+.ad-more { border: 1px dashed var(--border); background: transparent; color: var(--muted); border-radius: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 2px; cursor: pointer; }

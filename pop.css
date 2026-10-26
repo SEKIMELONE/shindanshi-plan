@@ -136,7 +136,6 @@
 [data-design="pop"] .ev.done { background: color-mix(in srgb, var(--c, var(--border)) 12%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 [data-design="pop"] .ev.done::after { color: var(--good); font-weight: 900; }
 [data-design="pop"] .ev.is-now { z-index: 3; }
-[data-design="pop"] .ev.carry { border-style: dashed; outline: 0; }
 [data-design="pop"] .ev.ghost { box-shadow: var(--pop); border: 2px solid var(--ink); transform: rotate(-2deg); }
 [data-design="pop"] .ev.draft { border: 2px solid var(--ink); box-shadow: var(--pop-sm); }
 [data-design="pop"] .ev.editing { opacity: .3; }
@@ -263,3 +262,7 @@
 [data-design="pop"] .ev.picked { border-color: var(--sky); box-shadow: 2px 2px 0 var(--sky); }
 [data-design="pop"] .ev.picked::before { background: var(--sky); color: #fff; box-shadow: 0 0 0 1.5px var(--ink); }
 [data-design="pop"] .selbar { border: 2px solid var(--ink); box-shadow: var(--pop); }
+
+[data-design="pop"] .ad-tog { color: var(--ink); font-weight: 700; }
+[data-design="pop"] .ad-tog i { color: var(--accent); }
+[data-design="pop"] .ad-more { border: 1.5px solid var(--ink); border-radius: 8px; color: var(--ink); background: var(--surface); box-shadow: var(--pop-sm); font-weight: 900; }
