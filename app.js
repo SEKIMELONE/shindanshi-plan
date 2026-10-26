@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v77';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v78';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1536,6 +1536,14 @@
     if (Date.now() > swallowUntil || $sheet.contains(ev.target)) return;
     ev.stopPropagation(); ev.preventDefault();
     swallowUntil = 0;
+  }, true);
+  // コマを選んでいるときに、ほかの場所をクリック（タップ）したら選択をやめるだけにする（そこの操作はしない）。
+  // 下の帯のボタンと、選んだコマをドラッグしたあとのクリックは除く
+  document.addEventListener('click', ev => {
+    if (!ui.sel.size || ev.shiftKey || ev.metaKey || ev.ctrlKey) return;
+    if (Date.now() - dragEndedAt < 400 || ev.target.closest('.selbar')) return;
+    ev.stopPropagation(); ev.preventDefault();
+    ui.sel.clear(); render();
   }, true);
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet();
