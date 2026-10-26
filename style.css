@@ -658,3 +658,16 @@ body.bar-hidden .ext-load { bottom: calc(env(safe-area-inset-bottom) + 20px); }
 /* 日の画面の見出し：左は空き（中央の日付がまん中に来るよう、右のボタンと同じ幅） */
 .dayhead .dh-sp { width: 56px; flex: none; }
 .btn.today-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* Shift で選んだコマ：枠と影を空色にし、右上にチェックを出す */
+.ev.picked { box-shadow: inset 0 0 0 2px var(--accent), 0 2px 6px rgba(0,0,0,.2); }
+.ev.picked::before { content: "✓"; position: absolute; top: 1px; right: 2px; width: 13px; height: 13px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); font-size: 9px; font-weight: 900; line-height: 1; z-index: 1; }
+/* 選んでいる間だけ出る操作の帯（右下の＋の代わり） */
+.selbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 14px); z-index: 16;
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0,0,0,.2); white-space: nowrap; max-width: calc(100vw - 16px); transition: bottom .28s cubic-bezier(.2, .8, .2, 1); }
+.selbar b { font-size: 14px; margin-right: 2px; }
+.selbar .btn.small { min-height: 32px; padding: 4px 10px; }
+body.bar-hidden .selbar { bottom: calc(env(safe-area-inset-bottom) + 14px); }
+.selbar ~ .fab { display: none; }

@@ -142,7 +142,7 @@
   const pct = (a, b) => (b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0);
 
   // ---------- 画面の状態 ----------
-  const ui = { tab: 'cal', calOffset: 0, day: null, scrollNow: false, week: null, pat: null, edit: false, showAll: false };
+  const ui = { tab: 'cal', calOffset: 0, day: null, scrollNow: false, week: null, pat: null, edit: false, showAll: false, sel: new Set() };   // sel：Shift で選んだコマ（'元の日付|uid'）
   const $view = document.getElementById('view');
   const $title = document.getElementById('title');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v72';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v73';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -308,6 +308,17 @@
     if (x.a != null) return atMin(x.shown, x.b) <= Date.now();
     return diff(days[6], today()) >= 0;
   }
+  // 選んだコマ（いま表示している週の分）
+  function selectedEvs() {
+    const days = ui.day ? weekDaysOf(parse(ui.day)) : (ui.calDays || []);
+    return weekEvents(days).filter(x => ui.sel.has(`${x.key}|${x.uid}`));
+  }
+  const selBar = () => !ui.sel.size ? '' : `<div class="selbar" role="toolbar" aria-label="選んだコマ">
+      <b class="num">${ui.sel.size}件</b>
+      <button class="btn small" data-action="sel-done">終わった</button>
+      <button class="btn small" data-action="sel-carry">次の週へ</button>
+      <button class="btn small" data-action="sel-reset">元の時間に</button>
+      <button class="btn ghost small" data-action="sel-clear" aria-label="選ぶのをやめる">✕</button></div>`;
   function carryOver(x) {
     S.moves[moveKey(x.key, x.uid)] = { d: ymd(addDays(x.shown, 7)), carry: true };
   }
@@ -340,7 +351,7 @@
   // mode: 'chip'（週表示の終日）／'week'（週表示）／'day'（日表示）
   function evHtml(x, style, isNow, mode = 'week') {
     const movable = x.p.type === 'study';
-    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : '', x.carry ? 'carry' : ''].join(' ');
+    const cls = ['ev', x.p.type, x.done ? 'done' : '', isNow ? 'is-now' : '', x.moved ? 'moved' : '', x.carry ? 'carry' : '', ui.sel.has(`${x.key}|${x.uid}`) ? 'picked' : ''].join(' ');
     const when = x.a == null ? '' : ` ${hm(x.a)}〜${hm(x.b)}`;
     const label = `${mdw(x.shown)}${when} ${x.short}${x.task ? ` ${x.task}` : ''}${x.done ? '（完了）' : ''}${x.moved ? '（移動済み）' : ''}`;
     let inner = `<b>${esc(x.short)}</b>${x.task && mode === 'week' ? `<span>${esc(x.task)}</span>` : ''}`;
@@ -443,7 +454,7 @@
         ${carryN ? `<button class="btn small" data-action="carry-week">終わっていないコマを次の週へ（${carryN}件）</button>` : ''}
       </div>
       <div class="section-h"><h2>この週の範囲</h2><button class="btn ghost small" data-action="openweek" data-w="${w}">週の詳細 ›</button></div>
-      <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
+      <div class="card flush">${ranges ? `<ul class="ranges">${ranges}</ul>` : '<div class="empty-note">この週の範囲はありません。</div>'}</div>${selBar()}${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
   }
 
   function toggleCheck(key, uid) {
@@ -634,7 +645,7 @@
           </div>
         </div>
         <aside class="day-side" aria-label="この日のまとめ">${side}</aside>
-      </div>${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
+      </div>${selBar()}${extOn() ? `<button class="fab" data-action="newev" aria-label="予定を追加"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>` : ''}`;
   }
 
   // 残り時間と時計を1秒ごとに進める（画面全体は描き直さない）
@@ -1522,7 +1533,10 @@
     ev.stopPropagation(); ev.preventDefault();
     swallowUntil = 0;
   }, true);
-  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet(); });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet();
+    else if (ev.key === 'Escape' && ui.sel.size && !$dlg.open) { ui.sel.clear(); render(); }
+  });
   // キーボードが出たら、その上にシートを持ち上げる
   if (window.visualViewport) {
     const vv = window.visualViewport;
@@ -1876,9 +1890,41 @@
       extOps([{ op: 'xmove', cid: e.cid, eid: e.eid, start: e.start, newStart: ns, newEnd: ne }], () => { e.start = ns; e.end = ne; }, `「${e.title}」を ${when} に動かしました`);
       return;
     }
-    const key = el.dataset.d, uid = el.dataset.u, u = findUnit(key, uid);
-    if (!u) return;
+    const key = el.dataset.d, uid = el.dataset.u;
+    if (!findUnit(key, uid)) return;
     const day = ui.calDays[target.col], nk = ymd(day);
+    // Shift で選んだコマをまとめて動かす：つかんだコマと同じだけ（日にち・時刻）ずらす
+    if (ui.sel.size > 1 && ui.sel.has(`${key}|${uid}`)) {
+      const evs = weekEvents(ui.day ? weekDaysOf(parse(ui.day)) : ui.calDays);
+      const me = evs.find(x => x.key === key && x.uid === uid);
+      if (!me) return;
+      const dd = diff(me.shown, day), dm = target.a != null && me.a != null ? target.a - me.a : 0;
+      let n = 0;
+      evs.filter(x => ui.sel.has(`${x.key}|${x.uid}`)).forEach(x => {
+        const nd = addDays(x.shown, dd);
+        if (rawWeek(nd) !== rawWeek(x.shown)) return;   // 週をまたぐ動きはしない
+        let a = null;
+        if (target.a != null) {
+          const dur = x.a != null ? x.b - x.a : (x.u.dur || POMO);
+          a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - dur, (x.a != null ? x.a + dm : target.a)));
+        }
+        if (placeUnit(x.key, x.uid, ymd(nd), a)) n++;
+      });
+      if (!n) return;
+      save(); render();
+      toast(`${n}件をまとめて動かしました`);
+      return;
+    }
+    if (!placeUnit(key, uid, nk, target.a)) return;
+    save(); render();
+    const k = moveKey(key, uid);
+    toast(S.moves[k] ? `${mdw(day)}${target.a == null ? '' : ` ${hm(target.a)}`} に移動しました` : '元の時間に戻しました');
+  }
+
+  // コマ1つを、nk の日の a 分（null なら終日の段）へ置く。変わったら true
+  function placeUnit(key, uid, nk, a) {
+    const u = findUnit(key, uid);
+    if (!u) return false;
     const k = moveKey(key, uid), before = S.moves[k];
     if (u.k != null && !before && S.moves[moveKey(key, u.s.i)]) {
       // 分ける前に90分ごと動かしていたら、残りの2つの位置を固定してから、このコマだけ動かす
@@ -1887,13 +1933,11 @@
       });
       delete S.moves[moveKey(key, u.s.i)];
     }
-    const same = u.flex ? target.a == null : (u.a0 == null || target.a === u.a0);
-    if (before && before.carry) S.moves[k] = target.a == null ? { d: nk, carry: true } : { d: nk, a: target.a, carry: true };
+    const same = u.flex ? a == null : (u.a0 == null || a === u.a0);
+    if (before && before.carry) S.moves[k] = a == null ? { d: nk, carry: true } : { d: nk, a, carry: true };
     else if (nk === key && same) delete S.moves[k];
-    else S.moves[k] = (u.a0 == null && !u.flex) || target.a == null ? { d: nk } : { d: nk, a: target.a };
-    if (JSON.stringify(before) === JSON.stringify(S.moves[k])) return;
-    save(); render();
-    toast(S.moves[k] ? `${mdw(day)}${target.a == null ? '' : ` ${hm(target.a)}`} に移動しました` : '元の時間に戻しました');
+    else S.moves[k] = (u.a0 == null && !u.flex) || a == null ? { d: nk } : { d: nk, a };
+    return JSON.stringify(before) !== JSON.stringify(S.moves[k]);
   }
 
   // ---------- 週 ----------
@@ -2428,7 +2472,7 @@
         break;
       }
       case 'calweek': {
-        const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; render(); break;
+        const v = +el.dataset.v; ui.calOffset = v === 0 ? 0 : ui.calOffset + v; ui.sel.clear(); render(); break;
       }
       case 'slot': openSlot(el.dataset.u, el.dataset.d); break;
       case 'ext': openExt(el.dataset.k, +el.dataset.n); break;
@@ -2439,6 +2483,19 @@
       case 'quickdone': {
         const uid = el.dataset.u, on = toggleCheck(el.dataset.d, uid);
         render(); toast(on ? `記録しました（＋${fmtGain(unitHours(uid))}）` : '未完了に戻しました'); break;
+      }
+      case 'sel-clear': ui.sel.clear(); render(); break;
+      case 'sel-done': case 'sel-carry': case 'sel-reset': {
+        const list = selectedEvs();
+        let n = 0, h = 0;
+        list.forEach(x => {
+          if (a === 'sel-done' && !x.done) { toggleCheck(x.key, x.uid); n++; h += x.hours; }
+          if (a === 'sel-carry' && !x.done && x.hours && weekOf(x.shown) < N) { carryOver(x); n++; }
+          if (a === 'sel-reset' && S.moves[moveKey(x.key, x.uid)]) { delete S.moves[moveKey(x.key, x.uid)]; n++; }
+        });
+        ui.sel.clear(); save(); render();
+        toast(!n ? '変えられるコマがありませんでした' : a === 'sel-done' ? `${n}件を「終わった」にしました（＋${fmtGain(h)}）` : a === 'sel-carry' ? `${n}件を次の週へ持ち越しました` : `${n}件を元の時間に戻しました`);
+        break;
       }
       case 'carry-week': {
         const days = ui.calDays || [];
@@ -2478,6 +2535,13 @@
   $view.addEventListener('click', e => {
     if (Date.now() - dragEndedAt < 400) return;   // ドラッグを離したときのクリックは無視
     const el = e.target.closest('[data-action]');
+    if (el && $view.contains(el) && el.dataset.action === 'slot' && el.closest('.ev.study') && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      // Shift（または ⌘・Ctrl）を押しながらクリック：コマを選ぶ・外す
+      const id = `${el.dataset.d}|${el.dataset.u}`;
+      if (ui.sel.has(id)) ui.sel.delete(id); else ui.sel.add(id);
+      render(); return;
+    }
+    if (el && $view.contains(el) && el.dataset.action === 'slot' && ui.sel.size) { ui.sel.clear(); }   // ふつうのクリックで選択はやめる
     if (el && $view.contains(el)) { onAction(el); return; }
     const cell = e.target.closest('.cal-body .col, .cal-allday .ad');
     if (cell && ui.tab === 'cal' && ui.calDays && extOn()) {
