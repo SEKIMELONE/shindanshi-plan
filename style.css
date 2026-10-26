@@ -671,3 +671,4 @@ body.bar-hidden .ext-load { bottom: calc(env(safe-area-inset-bottom) + 20px); }
 .selbar .btn.small { min-height: 32px; padding: 4px 10px; }
 body.bar-hidden .selbar { bottom: calc(env(safe-area-inset-bottom) + 14px); }
 .selbar ~ .fab { display: none; }
+.ev.ghost.follower { opacity: .9; pointer-events: none; }

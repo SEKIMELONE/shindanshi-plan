@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v73';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v74';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1533,6 +1533,14 @@
     ev.stopPropagation(); ev.preventDefault();
     swallowUntil = 0;
   }, true);
+  // Shift（⌘・Ctrl）を離したら選択をやめる。ドラッグ中なら、置いたあとにやめる
+  let clearSelAfterDrag = false;
+  document.addEventListener('keyup', ev => {
+    if (!['Shift', 'Meta', 'Control'].includes(ev.key) || !ui.sel.size || ev.shiftKey || ev.metaKey || ev.ctrlKey) return;
+    if (drag && drag.active) { clearSelAfterDrag = true; return; }
+    ui.sel.clear(); render();
+  });
+  addEventListener('blur', () => { if (ui.sel.size && !(drag && drag.active)) { ui.sel.clear(); render(); } });
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet();
     else if (ev.key === 'Escape' && ui.sel.size && !$dlg.open) { ui.sel.clear(); render(); }
@@ -1817,6 +1825,21 @@
     g.insertAdjacentHTML('afterbegin', '<i class="gt"></i>');
     drag.ghost = g;
     el.classList.add('drag-src');
+    // 選んだコマが複数あって、そのうち1つをつかんだら、ほかの選んだコマもいっしょに動いて見えるようにする
+    drag.group = [];
+    const colOf = e => { const c = e.closest('.col, .ad'); return c ? +c.dataset.col : 0; };
+    const minOf = e => MIN_H * 60 + parseFloat(e.style.top || 0) / hpx * 60;
+    if (el.classList.contains('picked') && ui.sel.size > 1) {
+      drag.me = { col: colOf(el), a: el.closest('.col') ? minOf(el) : null };
+      $view.querySelectorAll('.ev.picked').forEach(o => {
+        if (o === el) return;
+        const timed = !!o.closest('.col');
+        const fg = o.cloneNode(true);
+        fg.classList.add('ghost', 'follower'); fg.removeAttribute('data-action'); fg.setAttribute('aria-hidden', 'true');
+        o.classList.add('drag-src');
+        drag.group.push({ o, fg, col: colOf(o), a: timed ? minOf(o) : null, dur: +o.dataset.dur || POMO });
+      });
+    }
     document.body.classList.add('dragging');
     try { el.setPointerCapture(drag.id); } catch (err) { /* 古いブラウザ */ }
     if (navigator.vibrate) navigator.vibrate(10);
@@ -1845,6 +1868,7 @@
       drag.target = { col: k, a: null };
       g.querySelector('.gt').textContent = '';
       if (g.parentNode !== cell) cell.appendChild(g);
+      placeFollowers();
       return;
     }
     const r = cell.getBoundingClientRect();
@@ -1857,6 +1881,28 @@
     g.style.left = '2px'; g.style.width = 'calc(100% - 5px)';
     g.querySelector('.gt').textContent = `${hm(a)}〜${hm(a + drag.dur)}`;
     if (g.parentNode !== cell) cell.appendChild(g);
+    placeFollowers();
+  }
+  // いっしょに動くコマ：つかんだコマと同じだけ、曜日と時刻をずらして置く
+  function placeFollowers() {
+    if (!drag.group || !drag.group.length || !drag.target) return;
+    const dc = drag.target.col - drag.me.col;
+    const dm = drag.target.a != null && drag.me.a != null ? drag.target.a - drag.me.a : 0;
+    drag.group.forEach(f => {
+      const col = f.col + dc;
+      const toAllDay = drag.target.a == null || f.a == null;
+      const cells = [...$view.querySelectorAll(toAllDay ? '.cal-allday .ad' : '.cal-body .col')];
+      const cell = cells[col];
+      if (!cell || ui.day && col !== 0) { f.fg.remove(); return; }   // 表示の外（週をまたぐ）は出さない
+      if (toAllDay) { f.fg.style.cssText = f.o.style.getPropertyValue('--c') ? `--c:${f.o.style.getPropertyValue('--c')}` : ''; }
+      else {
+        const a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - f.dur, f.a + dm));
+        f.fg.style.top = `${((a - MIN_H * 60) / 60 * hpx).toFixed(1)}px`;
+        f.fg.style.height = `${(f.dur / 60 * hpx - 2).toFixed(1)}px`;
+        f.fg.style.left = '2px'; f.fg.style.width = 'calc(100% - 5px)';
+      }
+      if (f.fg.parentNode !== cell) cell.appendChild(f.fg);
+    });
   }
 
   // 画面の上下の端に近づいたら自動でスクロール
@@ -1872,9 +1918,14 @@
 
   function endDrag(commit) {
     const { el, ghost, target } = drag;
+    if (clearSelAfterDrag) {   // ドラッグ中に Shift を離していたら、置き終わってから選択をやめる
+      clearSelAfterDrag = false;
+      setTimeout(() => { ui.sel.clear(); render(); }, 0);
+    }
     cancelAnimationFrame(drag.raf);
     ghost.remove();
     el.classList.remove('drag-src');
+    (drag.group || []).forEach(f => { f.fg.remove(); f.o.classList.remove('drag-src'); });
     document.body.classList.remove('dragging');
     dragEndedAt = Date.now();
     drag = null;
