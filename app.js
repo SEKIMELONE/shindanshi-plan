@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v74';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v75';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1883,20 +1883,24 @@
     if (g.parentNode !== cell) cell.appendChild(g);
     placeFollowers();
   }
-  // いっしょに動くコマ：つかんだコマと同じだけ、曜日と時刻をずらして置く
+  // いっしょに動くコマ：つかんだコマと同じだけ、曜日と時刻をずらして置く。
+  // 終日の段にあったコマを時間の欄へ入れるときは、つかんだコマのうしろに5分ずつあけて順に並べる
   function placeFollowers() {
     if (!drag.group || !drag.group.length || !drag.target) return;
-    const dc = drag.target.col - drag.me.col;
-    const dm = drag.target.a != null && drag.me.a != null ? drag.target.a - drag.me.a : 0;
+    const T = drag.target, dc = T.col - drag.me.col;
+    const dm = T.a != null && drag.me.a != null ? T.a - drag.me.a : 0;
+    let cursor = T.a != null ? T.a + drag.dur + 5 : 0;
     drag.group.forEach(f => {
-      const col = f.col + dc;
-      const toAllDay = drag.target.a == null || f.a == null;
-      const cells = [...$view.querySelectorAll(toAllDay ? '.cal-allday .ad' : '.cal-body .col')];
+      let col, a = null;
+      if (T.a != null && f.a == null) { col = T.col; a = cursor; cursor += f.dur + 5; }   // 終日 → 時間の欄：順に並べる
+      else { col = f.col + dc; if (T.a != null) a = f.a + dm; }
+      if (a != null) a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - f.dur, a));
+      const cells = [...$view.querySelectorAll(a == null ? '.cal-allday .ad' : '.cal-body .col')];
       const cell = cells[col];
-      if (!cell || ui.day && col !== 0) { f.fg.remove(); return; }   // 表示の外（週をまたぐ）は出さない
-      if (toAllDay) { f.fg.style.cssText = f.o.style.getPropertyValue('--c') ? `--c:${f.o.style.getPropertyValue('--c')}` : ''; }
+      if (!cell || (ui.day && col !== 0)) { f.t = null; f.fg.remove(); return; }   // 表示の外（週をまたぐ）は動かさない
+      f.t = { col, a };
+      if (a == null) f.fg.style.cssText = f.o.style.getPropertyValue('--c') ? `--c:${f.o.style.getPropertyValue('--c')}` : '';
       else {
-        const a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - f.dur, f.a + dm));
         f.fg.style.top = `${((a - MIN_H * 60) / 60 * hpx).toFixed(1)}px`;
         f.fg.style.height = `${(f.dur / 60 * hpx - 2).toFixed(1)}px`;
         f.fg.style.left = '2px'; f.fg.style.width = 'calc(100% - 5px)';
@@ -1904,6 +1908,7 @@
       if (f.fg.parentNode !== cell) cell.appendChild(f.fg);
     });
   }
+
 
   // 画面の上下の端に近づいたら自動でスクロール
   function autoScroll() {
@@ -1917,7 +1922,7 @@
   }
 
   function endDrag(commit) {
-    const { el, ghost, target } = drag;
+    const { el, ghost, target, group } = drag;
     if (clearSelAfterDrag) {   // ドラッグ中に Shift を離していたら、置き終わってから選択をやめる
       clearSelAfterDrag = false;
       setTimeout(() => { ui.sel.clear(); render(); }, 0);
@@ -1944,22 +1949,13 @@
     const key = el.dataset.d, uid = el.dataset.u;
     if (!findUnit(key, uid)) return;
     const day = ui.calDays[target.col], nk = ymd(day);
-    // Shift で選んだコマをまとめて動かす：つかんだコマと同じだけ（日にち・時刻）ずらす
-    if (ui.sel.size > 1 && ui.sel.has(`${key}|${uid}`)) {
-      const evs = weekEvents(ui.day ? weekDaysOf(parse(ui.day)) : ui.calDays);
-      const me = evs.find(x => x.key === key && x.uid === uid);
-      if (!me) return;
-      const dd = diff(me.shown, day), dm = target.a != null && me.a != null ? target.a - me.a : 0;
-      let n = 0;
-      evs.filter(x => ui.sel.has(`${x.key}|${x.uid}`)).forEach(x => {
-        const nd = addDays(x.shown, dd);
-        if (rawWeek(nd) !== rawWeek(x.shown)) return;   // 週をまたぐ動きはしない
-        let a = null;
-        if (target.a != null) {
-          const dur = x.a != null ? x.b - x.a : (x.u.dur || POMO);
-          a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - dur, (x.a != null ? x.a + dm : target.a)));
-        }
-        if (placeUnit(x.key, x.uid, ymd(nd), a)) n++;
+    // Shift で選んだコマをまとめて動かす：ドラッグ中に見せた位置（placeFollowers が決めた位置）へ置く
+    if (group && group.length) {
+      let n = placeUnit(key, uid, nk, target.a) ? 1 : 0;
+      group.forEach(f => {
+        if (!f.t) return;
+        const d = ui.calDays[f.t.col];
+        if (d && placeUnit(f.o.dataset.d, f.o.dataset.u, ymd(d), f.t.a)) n++;
       });
       if (!n) return;
       save(); render();
