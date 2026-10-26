@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v78';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v79';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -396,6 +396,8 @@
     const adItems = days.map((d, k) => evs.filter(x => x.col === k && x.a == null).map(x => evHtml(x, '', false, 'chip'))
       .concat(exts.filter(x => x.col === k && x.a == null).map(x => extHtml(x, '', 'chip'))));
     const adOver = adItems.some(a => a.length > AD_LIMIT);
+    // 終日の段の勉強のコマの並び（Shift で範囲を選ぶときに使う。たたんで見えていない分もふくむ）
+    ui.adOrder = days.flatMap((d, k) => evs.filter(x => x.col === k && x.a == null && x.p.type === 'study').map(x => `${x.key}|${x.uid}`));
     const allday = days.map((d, k) => {
       const items = adItems[k];
       const dr = ui.draft && ui.draft.allDay && ui.draft.day === ymd(d) ? draftHtml(ui.draft, 'week') : '';
@@ -540,6 +542,7 @@
     const extD = extEvents(days).filter(x => x.col === col);
     extEnsure(days);
     const timed = evs.filter(x => x.a != null), allday = evs.filter(x => x.a == null);
+    ui.adOrder = allday.filter(x => x.p.type === 'study').map(x => `${x.key}|${x.uid}`);
     const study = evs.filter(x => x.p.type === 'study');
     const planH = study.reduce((h, x) => h + x.hours, 0);
     const doneH = study.filter(x => x.done).reduce((h, x) => h + x.hours, 0);
@@ -2586,7 +2589,12 @@
     if (el && $view.contains(el) && el.dataset.action === 'slot' && el.closest('.ev.study') && (e.shiftKey || e.metaKey || e.ctrlKey)) {
       // Shift（または ⌘・Ctrl）を押しながらクリック：コマを選ぶ・外す
       const id = `${el.dataset.d}|${el.dataset.u}`;
-      if (ui.sel.has(id)) ui.sel.delete(id); else ui.sel.add(id);
+      const order = ui.adOrder || [], i = order.indexOf(id), j = order.indexOf(ui.selAnchor);
+      if (e.shiftKey && i >= 0 && j >= 0 && i !== j && ui.sel.has(ui.selAnchor)) {
+        // 終日の段：前に選んだコマから今のコマまで、あいだを全部選ぶ
+        order.slice(Math.min(i, j), Math.max(i, j) + 1).forEach(x => ui.sel.add(x));
+      } else if (ui.sel.has(id)) ui.sel.delete(id); else ui.sel.add(id);
+      ui.selAnchor = id;
       render(); return;
     }
     if (el && $view.contains(el) && el.dataset.action === 'slot' && ui.sel.size) { ui.sel.clear(); }   // ふつうのクリックで選択はやめる
