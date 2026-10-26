@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v71';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v72';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -301,9 +301,9 @@
     }
     return evs;
   }
-  // 持ち越せるコマ：勉強・未完了・毎日の1問や予備／振り返り以外。時間つきは終わる時刻が過ぎたもの、時間未定は日曜から
+  // 持ち越せるコマ：勉強・未完了（毎日の財務1問もふくむ。予備／振り返りは除く）。時間つきは終わる時刻が過ぎたもの、時間未定は日曜から
   function carryable(x, days) {
-    if (x.p.type !== 'study' || x.done || x.s.day === '毎日' || x.hours === 0) return false;
+    if (x.p.type !== 'study' || x.done || x.hours === 0) return false;
     if (x.col < 0 || x.col >= 7) return false;
     if (x.a != null) return atMin(x.shown, x.b) <= Date.now();
     return diff(days[6], today()) >= 0;
@@ -480,7 +480,7 @@
       ${rng.length ? `<div class="field"><span>この週の範囲</span>${rng.map(([j, r]) => `<div class="rg"><span class="dot" style="background:${color(SUBJ[j])}"></span><span>${rng.length > 1 ? `<b>${esc(SUBJ[j])}</b>　` : ''}${esc(r)}</span></div>`).join('')}</div>` : ''}
       <div class="dlg-actions">
         ${x.moved ? `<button class="btn ghost" data-dlg="unmove" type="button">${x.carry ? '持ち越しをやめる' : '元の時間に戻す'}</button>` : ''}
-        ${study && !x.done && s.day !== '毎日' && x.hours && weekOf(x.shown) < N ? '<button class="btn ghost" data-dlg="carry" type="button">次の週へ持ち越す</button>' : ''}<span class="spacer"></span>
+        ${study && !x.done && x.hours && weekOf(x.shown) < N ? '<button class="btn ghost" data-dlg="carry" type="button">次の週へ持ち越す</button>' : ''}<span class="spacer"></span>
         <button class="btn" data-dlg="cancel" type="button">閉じる</button>
         ${study ? `<button class="btn${x.done ? '' : ' primary'}" data-dlg="toggle" type="button">${x.done ? '未完了に戻す' : `終わった${x.hours ? `（＋${fmtGain(x.hours)}）` : ''}`}</button>` : ''}
       </div>`, act => {
