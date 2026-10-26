@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v80';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v81';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -2605,13 +2605,19 @@
     if (el && $view.contains(el)) { onAction(el); return; }
     const cell = e.target.closest('.cal-body .col, .cal-allday .ad');
     if (cell && ui.tab === 'cal' && ui.calDays && extOn()) {
+      // 新しい予定は、空いているところをダブルタップ（ダブルクリック）で入れる。1回目のタップは覚えておくだけ
+      const now = Date.now(), prev = lastTap, where = `${cell.classList.contains('ad') ? 'ad' : 'col'}${cell.dataset.col}`;
+      lastTap = { t: now, x: e.clientX, y: e.clientY, where };
+      if (!prev || now - prev.t > 380 || prev.where !== where || Math.hypot(e.clientX - prev.x, e.clientY - prev.y) > 24) return;
+      lastTap = null;
       const day = ui.calDays[+cell.dataset.col];
       if (!day) return;
       if (cell.classList.contains('ad')) { openAdd(day, 9 * 60, true); return; }
       const m = MIN_H * 60 + (e.clientY - cell.getBoundingClientRect().top) / hpx * 60;
-      openAdd(day, Math.floor(m / 30) * 30, false);   // タップした30分の枠から1時間
+      openAdd(day, Math.floor(m / 30) * 30, false);   // ダブルタップした30分の枠から1時間
     }
   });
+  let lastTap = null;
   $view.addEventListener('keydown', e => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"][data-action]')) { e.preventDefault(); onAction(e.target); }
   });
