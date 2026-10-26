@@ -1,6 +1,6 @@
 // オフラインでも開けるように、アプリの部品を端末に保存しておく。
 // アプリを更新したら VERSION を上げる。
-const VERSION = 'v76';
+const VERSION = 'v77';
 const CACHE = `shindanshi-plan-${VERSION}`;
 const ASSETS = [
   './', 'index.html', 'style.css', 'pop.css', 'app.js', 'plan.js', 'manifest.webmanifest',

@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v76';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v77';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1537,14 +1537,6 @@
     ev.stopPropagation(); ev.preventDefault();
     swallowUntil = 0;
   }, true);
-  // Shift（⌘・Ctrl）を離したら選択をやめる。ドラッグ中なら、置いたあとにやめる
-  let clearSelAfterDrag = false;
-  document.addEventListener('keyup', ev => {
-    if (!['Shift', 'Meta', 'Control'].includes(ev.key) || !ui.sel.size || ev.shiftKey || ev.metaKey || ev.ctrlKey) return;
-    if (drag && drag.active) { clearSelAfterDrag = true; return; }
-    ui.sel.clear(); render();
-  });
-  addEventListener('blur', () => { if (ui.sel.size && !(drag && drag.active)) { ui.sel.clear(); render(); } });
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && sheetOpen() && !$sheet.contains(ev.target)) closeSheet();
     else if (ev.key === 'Escape' && ui.sel.size && !$dlg.open) { ui.sel.clear(); render(); }
@@ -1927,10 +1919,6 @@
 
   function endDrag(commit) {
     const { el, ghost, target, group } = drag;
-    if (clearSelAfterDrag) {   // ドラッグ中に Shift を離していたら、置き終わってから選択をやめる
-      clearSelAfterDrag = false;
-      setTimeout(() => { ui.sel.clear(); render(); }, 0);
-    }
     cancelAnimationFrame(drag.raf);
     ghost.remove();
     el.classList.remove('drag-src');
