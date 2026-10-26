@@ -178,7 +178,7 @@
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v79';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v80';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1737,6 +1737,7 @@
     r.el.classList.remove('resizing');
     if (!r.moved) return;
     dragEndedAt = Date.now();
+    if (ui.sel.size) { ui.sel.clear(); setTimeout(render, 0); }   // 何か操作したら選択はやめる
     if (r.kind === 'draft') { if (ok) drawSheet(); return; }
     if (!ok || (r.a === r.a0 && r.b === r.b0)) { render(); return; }
     const e2 = r.ev, ns = e2.start + (r.a - r.a0) * 60000, ne = e2.start + (r.b - r.a0) * 60000;
@@ -1791,6 +1792,7 @@
       const was = mk.active; mk = null;
       if (!was || !ui.draft) return;
       dragEndedAt = Date.now();
+      if (ui.sel.size) ui.sel.clear();
       if (sheetOpen()) { drawSheet(); revealDraft(); } else openSheet(ui.draft);
       return;
     }
@@ -1930,6 +1932,8 @@
 
   function endDrag(commit) {
     const { el, ghost, target, group } = drag;
+    // 動かしたら、選んでいたコマの選択はやめる（いっしょに動かす分は group に取ってある）
+    if (commit && ui.sel.size) { ui.sel.clear(); setTimeout(render, 0); }
     cancelAnimationFrame(drag.raf);
     ghost.remove();
     el.classList.remove('drag-src');
