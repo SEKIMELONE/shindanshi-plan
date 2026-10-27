@@ -172,13 +172,13 @@
   // ---------- カレンダー（メイン画面） ----------
   const SHORT = { '財務・会計': '財務', '経済学': '経済', '企業経営理論': '企業', '運営管理': '運営', '経営情報システム': '情報', '経営法務': '法務', '中小企業経営・政策': '中小' };
   const HOUR_PX = 52;                   // 週表示の1時間の高さ
-  const DAY_HPX = 60;                   // 日表示の1時間の高さ
+  const DAY_HPX = 96;                   // 日表示の1時間の高さ（10分＝16px）
   let hpx = HOUR_PX;                    // いま表示中の画面の1時間の高さ（ドラッグで使う）
   const SNAP = 10;                       // 移動は10分刻み（大学の時限が10分単位なので）
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v81';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v82';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
