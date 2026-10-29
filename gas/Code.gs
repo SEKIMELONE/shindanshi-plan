@@ -83,6 +83,7 @@ function saveState_(updatedAt, data) {
 //  { token, op: 'xmove', cid, eid, start, newStart, newEnd }   … 予定を動かす（start は元の開始時刻）
 //  { token, op: 'xedit', cid, eid, start, title, loc, desc }   … 予定の名前・場所・メモを変える（送ったものだけ）
 //  { token, op: 'xdel',  cid, eid, start }                     … 予定を消す（くり返し予定はその回だけ）
+//  { token, op: 'xdelall', cid, eid }                        … くり返し予定をまるごと消す
 //  { token, op: 'xadd',  cid, title, start, end, allDay, color, label, loc, desc, repeat } … 予定を追加する
 //      repeat: { freq: 'daily'|'weekly'|'biweekly'|'weekdays'|'monthly'|'yearly', until: ミリ秒（なければずっと） } … くり返しの予定にする
 //  { token, op: 'xcolor', cid, eid, start, color }             … 予定の色を変える（'1'〜'11'）
@@ -111,7 +112,7 @@ function doPost(e) {
   }
 
   const cal = getCalendar_();
-  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 8 });
+  if (req.ping) return out_({ ok: true, calendar: cal.getName(), version: 9 });
 
   if (req.op === 'cals') {
     const cals = CalendarApp.getAllCalendars()
@@ -151,7 +152,7 @@ function doPost(e) {
     return out_({ ok: true, events: events, labels: labels });
   }
 
-  if (/^x(move|edit|del|add|color|label)$/.test(req.op || '')) {
+  if (/^x(move|edit|del|delall|add|color|label)$/.test(req.op || '')) {
     if (req.cid === cal.getId()) return out_({ ok: false, error: '診断士プランのカレンダーはアプリのコマで動かしてください' });
     const c = CalendarApp.getCalendarById(req.cid);
     if (!c) return out_({ ok: false, error: 'カレンダーが見つかりません' });
@@ -179,6 +180,12 @@ function doPost(e) {
           else setLabel_(req.cid, ev.getId(), (req.allDay ? ev.getAllDayStartDate() : ev.getStartTime()).getTime(), req.label);
         }
         return out_({ ok: true, eid: ev.getId() });
+      }
+      if (req.op === 'xdelall') {
+        const sr = c.getEventSeriesById(req.eid);
+        if (!sr) return out_({ ok: false, error: '予定が見つかりません（Googleカレンダー側で変わったかもしれません）' });
+        sr.deleteEventSeries();
+        return out_({ ok: true });
       }
       if (req.op === 'xlabel') {
         if (!setLabel_(req.cid, req.eid, Number(req.start), req.label)) return out_({ ok: false, error: '色の名前を付けられませんでした（スクリプトに「Google Calendar API」のサービスを追加してください）' });
