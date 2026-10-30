@@ -198,7 +198,7 @@
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v84';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v85';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------

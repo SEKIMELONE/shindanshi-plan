@@ -186,7 +186,6 @@ button.dh:active .dn, button.dh:hover .dn { box-shadow: 0 0 0 2px var(--surface-
 .ad .ev.ghost { order: 99; }
 .ev .gt { font-style: normal; font-size: 10px; font-weight: 700; color: var(--text); }
 .ev .gt:empty { display: none; }
-.ev.moved::before { content: "↷"; position: absolute; right: 3px; top: 1px; font-size: 10px; color: var(--muted); }
 body.dragging, body.dragging * { cursor: grabbing !important; }
 body.dragging { -webkit-user-select: none; user-select: none; }
 .cal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 2px 0; flex-wrap: wrap; }
