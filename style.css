@@ -242,6 +242,12 @@ body.dragging { -webkit-user-select: none; user-select: none; }
 .cal.day .ev span { font-size: 11.5px; }
 .cal.day .ev small { font-size: 10.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
 .cal.day .ev.done small { text-decoration: none; }
+/* 短いコマ：1行で上下の真ん中に（fitEvents が付ける）。fit-0 は文字が入らないので出さない */
+.cal-body .ev.fit-1 { flex-direction: row; align-items: center; gap: 6px; padding-top: 0; padding-bottom: 0; }
+.cal-body .ev.fit-1 :is(span, small, .gt) { display: none; }
+.cal-body .ev.fit-1 b { white-space: nowrap; overflow: hidden; line-height: 1.15; min-width: 0; }
+.cal-body .ev.fit-1 .tm { flex: none; line-height: 1.15; }
+.cal-body .ev.fit-0 :is(b, span, small, .tm, .gt), .cal-body .ev.fit-notm .tm { display: none; }
 .ev .tm { font-style: normal; font-size: 10px; font-weight: 600; color: var(--muted); }
 .ev.ghost .tm { display: none; }
 .day-side { position: sticky; top: calc(env(safe-area-inset-top) + 72px); display: flex; flex-direction: column; gap: 10px;

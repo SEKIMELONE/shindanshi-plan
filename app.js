@@ -156,6 +156,7 @@
     const f = { cal: () => (ui.day ? renderDay() : renderCal()), week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
     $view.classList.toggle('wide', ui.tab === 'cal');
     $view.innerHTML = f();
+    fitEvents();
     if (ui.tab === 'cal' && ui.scrollNow) {
       // カレンダーを開いたら、今の時刻（なければ朝7時）が見える位置まで動かす
       ui.scrollNow = false;
@@ -172,6 +173,21 @@
     }
   }
 
+  // 短いコマは1行にして上下の真ん中に置く。それでも入らない文字は出さない
+  function fitEvents() {
+    if (!$view.clientWidth) return;   // 画面が隠れていて幅が0のときは測れないので、見えてからやり直す
+    $view.querySelectorAll('.cal-body .col .ev:not(.ghost):not(.draft)').forEach(el => {
+      el.classList.remove('fit-1', 'fit-0', 'fit-notm');
+      if (el.scrollHeight <= el.clientHeight + 1) return;
+      el.classList.add('fit-1');
+      const b = el.querySelector('b'), over = () => !b || b.scrollWidth > b.clientWidth + 1 || b.offsetHeight > el.clientHeight + 1;
+      if (over() && el.querySelector('.tm')) el.classList.add('fit-notm');   // 時刻を消せば教科が入るなら、時刻のほうを消す
+      if (over()) el.classList.replace('fit-1', 'fit-0');
+    });
+  }
+  let fitTimer = 0;
+  new ResizeObserver(() => { clearTimeout(fitTimer); fitTimer = setTimeout(fitEvents, 150); }).observe($view);
+
   // ---------- カレンダー（メイン画面） ----------
   const SHORT = { '財務・会計': '財務', '経済学': '経済', '企業経営理論': '企業', '運営管理': '運営', '経営情報システム': '情報', '経営法務': '法務', '中小企業経営・政策': '中小' };
   const HOUR_PX = 52;                   // 週表示の1時間の高さ
@@ -182,7 +198,7 @@
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v83';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v84';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
