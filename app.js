@@ -142,7 +142,8 @@
   const pct = (a, b) => (b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0);
 
   // ---------- 画面の状態 ----------
-  const ui = { tab: 'cal', calOffset: 0, day: null, scrollNow: false, week: null, pat: null, edit: false, showAll: false, sel: new Set() };   // sel：Shift で選んだコマ（'元の日付|uid'）
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // 開いたときは前の位置でなく、今の時刻（朝7時）へ動かす
+  const ui = { tab: 'cal', calOffset: 0, day: null, scrollNow: true, week: null, pat: null, edit: false, showAll: false, sel: new Set() };   // sel：Shift で選んだコマ（'元の日付|uid'）
   const $view = document.getElementById('view');
   const $title = document.getElementById('title');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -155,11 +156,13 @@
     const f = { cal: () => (ui.day ? renderDay() : renderCal()), week: renderWeek, timetable: renderTimetable, overview: renderOverview }[ui.tab];
     $view.classList.toggle('wide', ui.tab === 'cal');
     $view.innerHTML = f();
-    if (ui.tab === 'cal' && ui.day && ui.scrollNow) {
-      // 日ページを開いたら、今の時刻（なければ最初のコマ）が見える位置まで動かす
+    if (ui.tab === 'cal' && ui.scrollNow) {
+      // カレンダーを開いたら、今の時刻（なければ朝7時）が見える位置まで動かす
       ui.scrollNow = false;
-      const el = $view.querySelector('.day-main .nowline') || $view.querySelector('.day-main .col .ev');
-      scrollTo(0, el ? Math.max(0, el.getBoundingClientRect().top + scrollY - innerHeight * 0.3) : 0);
+      const el = $view.querySelector('.day-main .nowline, .cal-body .nowline'), body = $view.querySelector('.cal-body');
+      const head = $view.querySelector('.cal-sticky, .daystrip');
+      if (el) scrollTo(0, Math.max(0, el.getBoundingClientRect().top + scrollY - innerHeight * 0.3));
+      else if (body) scrollTo(0, Math.max(0, body.getBoundingClientRect().top + scrollY + (START_H - MIN_H) * hpx - (head ? head.offsetHeight : 0) - 8));
     }
     gcalSchedule();
     if (typeof placeSheet === 'function' && $sheet.open) placeSheet();
@@ -176,9 +179,10 @@
   let hpx = HOUR_PX;                    // いま表示中の画面の1時間の高さ（ドラッグで使う）
   const SNAP = 10;                       // 移動は10分刻み（大学の時限が10分単位なので）
   const TIMED = SLOTS.filter(s => s.a != null);
-  const MIN_H = Math.floor(Math.min(...TIMED.map(s => s.a)) / 60);
+  const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
+  const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v82';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v83';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -2500,11 +2504,11 @@
 
   function switchTab(tab) {
     if (ui.tab === tab) {
-      if (tab === 'cal' && ui.day) { backToWeek(); render(); window.scrollTo(0, 0); return; }
+      if (tab === 'cal' && ui.day) { backToWeek(); ui.scrollNow = true; render(); return; }
       window.scrollTo({ top: 0, behavior: 'smooth' }); return;
     }
-    ui.tab = tab; ui.edit = false;
-    render(); window.scrollTo(0, 0);
+    ui.tab = tab; ui.edit = false; ui.scrollNow = tab === 'cal';
+    window.scrollTo(0, 0); render();
   }
 
   document.querySelector('.tabs').addEventListener('click', e => {
@@ -2533,7 +2537,7 @@
       case 'openday': case 'dayjump': ui.day = el.dataset.d; ui.scrollNow = true; render(); break;
       case 'dayshift': ui.day = ymd(addDays(parse(ui.day), +el.dataset.v)); ui.scrollNow = true; render(); break;
       case 'daytoday': ui.day = ymd(today()); ui.scrollNow = true; render(); break;
-      case 'dayback': backToWeek(); render(); window.scrollTo(0, 0); break;
+      case 'dayback': backToWeek(); ui.scrollNow = true; render(); break;
       case 'quickdone': {
         const uid = el.dataset.u, on = toggleCheck(el.dataset.d, uid);
         render(); toast(on ? `記録しました（＋${fmtGain(unitHours(uid))}）` : '未完了に戻しました'); break;
