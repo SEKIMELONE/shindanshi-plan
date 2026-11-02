@@ -193,12 +193,12 @@
   const HOUR_PX = 52;                   // 週表示の1時間の高さ
   const DAY_HPX = 96;                   // 日表示の1時間の高さ（10分＝16px）
   let hpx = HOUR_PX;                    // いま表示中の画面の1時間の高さ（ドラッグで使う）
-  const SNAP = 10;                       // 移動は10分刻み（大学の時限が10分単位なので）
+  const snap = () => (ui.day ? 5 : 10);  // 移動は10分刻み（大学の時限が10分単位なので）。1日の拡大表示では5分刻み
   const TIMED = SLOTS.filter(s => s.a != null);
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v86';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v87';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1716,7 +1716,6 @@
 
   // ---------- 下の端を引っぱって長さを変える（Googleカレンダーと同じ） ----------
   let rz = null;
-  const RZ_SNAP = 10;   // 長さを変えるのは10分刻み（動かすのと同じ）
   $view.addEventListener('pointerdown', e => {
     const h = e.target.closest('.rz');
     if (!h || e.button > 0) return;
@@ -1737,10 +1736,10 @@
   addEventListener('pointermove', e => {
     if (!rz || e.pointerId !== rz.id) return;
     e.preventDefault();
-    const m = Math.round((MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60) / RZ_SNAP) * RZ_SNAP;
+    const m = Math.round((MIN_H * 60 + (e.clientY - rz.cell.getBoundingClientRect().top) / hpx * 60) / snap()) * snap();
     // 上の端は始まり、下の端は終わりを動かす（10分刻み、10分より短くはしない）
-    const a = rz.top ? Math.max(MIN_H * 60, Math.min(rz.b - RZ_SNAP, m)) : rz.a;
-    const b = rz.top ? rz.b : Math.max(rz.a + RZ_SNAP, Math.min(24 * 60 - 5, m));
+    const a = rz.top ? Math.max(MIN_H * 60, Math.min(rz.b - snap(), m)) : rz.a;
+    const b = rz.top ? rz.b : Math.max(rz.a + snap(), Math.min(24 * 60 - 5, m));
     if (a === rz.a && b === rz.b) return;
     rz.a = a; rz.b = b; rz.moved = true;
     if (rz.kind === 'draft') { ui.draft.a = a; ui.draft.b = b; updateDraft(); return; }
@@ -1902,7 +1901,7 @@
     }
     const r = cell.getBoundingClientRect();
     let a = MIN_H * 60 + (drag.y - drag.grabY - r.top) / hpx * 60;
-    a = Math.round(a / SNAP) * SNAP;
+    a = Math.round(a / snap()) * snap();
     a = Math.max(MIN_H * 60, Math.min(MAX_H * 60 - drag.dur, a));
     drag.target = { col: k, a };
     g.style.top = `${((a - MIN_H * 60) / 60 * hpx).toFixed(1)}px`;
