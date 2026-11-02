@@ -136,7 +136,7 @@
 [data-design="pop"] .ev.done { background: color-mix(in srgb, var(--c, var(--border)) 12%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 [data-design="pop"] .ev.done::after { color: var(--good); font-weight: 900; }
 [data-design="pop"] .ev.is-now { z-index: 3; }
-[data-design="pop"] .ev.ghost { box-shadow: var(--pop); border: 2px solid var(--ink); transform: rotate(-2deg); }
+[data-design="pop"] .ev.ghost { box-shadow: var(--pop); border: 2px solid var(--ink); }
 [data-design="pop"] .ev.draft { border: 2px solid var(--ink); box-shadow: var(--pop-sm); }
 [data-design="pop"] .ev.editing { opacity: .3; }
 [data-design="pop"] .nowline { background: var(--accent); height: 2.5px; }
@@ -236,7 +236,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   [data-design="pop"] *, [data-design="pop"] *::before, [data-design="pop"] *::after { animation: none !important; }
-  [data-design="pop"] .ev.ghost { transform: none; }
 }
 /* 角が丸い（24px）ので、上下に固定した帯の中身を角から離す */
 [data-design="pop"] .sticky-actions { padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
