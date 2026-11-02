@@ -198,7 +198,7 @@
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v88';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v89';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1653,6 +1653,7 @@
         ${next ? `<p class="fin-next">${next.a - nowMin <= 5 ? '5分休憩' : '休憩'} → 次は <b>${esc(evName(next))}</b>（<span class="num">${hm(next.a)}〜</span>）<br>あと <b class="num" data-cd="${atMin(t, next.a)}">${fmtLeft(atMin(t, next.a) - Date.now())}</b></p>` : '<p class="fin-next">今日のコマはこれで最後です</p>'}
         <div class="fin-btns">
           <button class="btn fin-later" type="button" data-fin="close">やってない</button>
+          ${x.hours && weekOf(x.shown) < N ? '<button class="btn fin-carry" type="button" data-fin="carry">次週に持ち越し</button>' : ''}
           <button class="btn primary" type="button" data-fin="done">終わった（＋${fmtGain(x.hours)}）</button>
         </div>
       </div>`;
@@ -1677,6 +1678,8 @@
       if (b.dataset.fin === 'done') {
         if (!isDone(x.key, x.u)) toggleCheck(x.key, x.uid);
         render(); toast(`記録しました（＋${fmtGain(x.hours)}）`);
+      } else if (b.dataset.fin === 'carry') {
+        carryOver(x); save(); render(); toast(`${mdw(addDays(x.shown, 7))}の「終日」の段へ持ち越しました`);
       }
       close();
     });

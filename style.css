@@ -457,8 +457,8 @@ dialog::backdrop { background: rgba(10, 12, 16, .45); }
 .fin-next { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); line-height: 1.7; }
 .fin-next b { color: var(--text); }
 .fin-next b.num { font-size: 22px; color: var(--now); }
-.fin-btns { display: flex; gap: 8px; margin-top: 16px; }
-.fin-btns .btn { flex: 1; min-height: 48px; font-size: 15px; }
+.fin-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }   /* 入りきらないときは「終わった」が下の段に回る */
+.fin-btns .btn { flex: 1 1 auto; min-height: 48px; font-size: 15px; white-space: nowrap; }
 .fin-confetti { position: absolute; inset: 0; pointer-events: none; }
 .fin-confetti i { position: absolute; top: -20px; width: 9px; height: 15px; border-radius: 2px;
   background: hsl(var(--h) 85% 60%); transform: rotate(var(--r)); animation: fin-fall 2.4s cubic-bezier(.3, .6, .5, 1) forwards; }
