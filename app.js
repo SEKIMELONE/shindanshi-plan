@@ -198,7 +198,7 @@
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v89';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v90';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -1609,7 +1609,15 @@
 
 
   // ---------- コマが終わったら、音なしで目立たせる（画面全体のお知らせ・振動・タブ名の点滅） ----------
-  const finishShown = new Set();
+  // 一度出した「おつかれさま」は、開き直しても出さない（その日の分だけ端末に覚えておく）
+  const FIN_KEY = 'shindanshi-plan:finShown';
+  const finishShown = new Set((() => {
+    try { const j = JSON.parse(localStorage.getItem(FIN_KEY) || '{}'); return j.d === ymd(today()) ? j.keys : []; } catch (e) { return []; }
+  })());
+  const rememberFinish = k => {
+    finishShown.add(k);
+    try { localStorage.setItem(FIN_KEY, JSON.stringify({ d: ymd(today()), keys: [...finishShown] })); } catch (e) { /* 覚えられなくても動く */ }
+  };
   let lastFinishCheck = Date.now(), titleBlink = 0;
 
   // 今日の勉強のコマ（時間つき・今日に置いてあるもの）
@@ -1634,7 +1642,7 @@
 
   const POP_CONFETTI = ['accent', 'sun', 'lavender', 'lime', 'orange', 'sky'];
   function showFinish(x) {
-    finishShown.add(`${x.key}|${x.uid}`);
+    rememberFinish(`${x.key}|${x.uid}`);
     const t = today(), nowMin = new Date().getHours() * 60 + new Date().getMinutes();
     const next = todayStudy().find(y => y.a >= nowMin && y.uid !== x.uid);
     const mins = Math.round(x.hours * 60);
