@@ -198,7 +198,7 @@
   const MIN_H = 0;                      // 夜中の睡眠も見えるように0時から表示（開いたときは朝の位置まで動かす）
   const START_H = 7;                    // 開いたときに上に来る時刻
   const MAX_H = 24;                     // 夜にも動かせるように24時まで表示
-  const APP_VER = 'v90';   // sw.js の VERSION と同じにする
+  const APP_VER = 'v91';   // sw.js の VERSION と同じにする
   const hm = m => `${Math.floor(m / 60)}:${pad(m % 60)}`;
 
   // ---------- 25分×3（間に5分休憩）に分けたコマと、休憩で減った分の追加コマ ----------
@@ -266,9 +266,8 @@
     }
     if (!m) return null;
     const gap = rawWeek(parse(m.d)) - rawWeek(parse(key));
-    return gap === 0 || (m.carry && gap > 0 && gap <= CARRY_WEEKS) ? m : null;
+    return gap === 0 || (m.carry && gap > 0) ? m : null;   // 持ち越しは何週先でもよい（重ねて持ち越すと4週以上先になる）
   }
-  const CARRY_WEEKS = 3;   // 持ち越せるのは3週先まで
   function isDone(key, u) {
     const c = S.checks[key] || {};
     return !!(c[u.uid] || (u.k != null && c[u.s.i]));   // 分ける前に90分ごと「終わった」にしたもの
@@ -306,18 +305,20 @@
       const x = slotInfo(u, d);
       if (x) { x.col = diff(days[0], x.shown); evs.push(x); }
     }));
-    // 前の週（3週前まで）から持ち越してきたコマ
-    const hasCarry = Object.values(S.moves).some(m => m && m.carry);
-    if (hasCarry) for (let back = 1; back <= CARRY_WEEKS; back++) for (let k = 0; k < 7; k++) {
-      const d = addDays(days[0], -7 * back + k), key = ymd(d);
-      unitsOf(d).forEach(u => {
-        const m = S.moves[moveKey(key, u.uid)];
-        if (!m || !m.carry) return;
-        const x = slotInfo(u, d);
-        if (!x) return;
-        const col = diff(days[0], x.shown);
-        if (col >= 0 && col < days.length) { x.col = col; evs.push(x); }
-      });
+    // 前の週から持ち越してきたコマ（何週前からでも）
+    const lo = ymd(days[0]), hi = ymd(days[days.length - 1]), units = {};
+    for (const mk in S.moves) {
+      const m = S.moves[mk];
+      if (!m || !m.carry || m.d < lo || m.d > hi) continue;
+      const i = mk.indexOf('|'), key = mk.slice(0, i), uid = mk.slice(i + 1);
+      if (key >= lo) continue;   // この週のコマは上で並べた
+      const d = parse(key);
+      const u = (units[key] ||= unitsOf(d)).find(v => v.uid === uid);
+      if (!u) continue;
+      const x = slotInfo(u, d);
+      if (!x) continue;
+      const col = diff(days[0], x.shown);
+      if (col >= 0 && col < days.length) { x.col = col; evs.push(x); }
     }
     return evs;
   }
