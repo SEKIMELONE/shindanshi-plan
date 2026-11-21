@@ -14,9 +14,10 @@
   --orange: #ff5f2d;
   --sky: #1d6fe0;
   --danger: #c4161c;
-  --pop: 4px 4px 0 var(--ink);
-  --pop-sm: 2px 2px 0 var(--ink);
-  --pop-lg: 8px 8px 0 var(--ink);
+  /* カード・ボタンの影は付けない（本人の好み）。影の場所を残すため 0 にしておく */
+  --pop: 0 0 0 transparent;
+  --pop-sm: 0 0 0 transparent;
+  --pop-lg: 0 0 0 transparent;
   --spring: cubic-bezier(.34, 1.56, .64, 1);
   /* アプリの色の役割に当てはめる */
   --bg: #f5f1e4;
@@ -90,10 +91,9 @@
 /* マウスを乗せたら、弾まずにすっと浮く。押すと沈んで、離すとバネで戻る */
 @media (hover: hover) {
   [data-design="pop"] .btn:not(.ghost):not([disabled]):hover, [data-design="pop"] .chip:hover, [data-design="pop"] .es-chip:hover {
-    transform: translate(-1px, -2px); box-shadow: 4px 5px 0 var(--ink); transition: transform .18s ease-out, box-shadow .18s ease-out; }
-  [data-design="pop"] .es-chip:not(.on):hover { box-shadow: 2px 3px 0 var(--ink); }
-  [data-design="pop"] .pill:hover { transform: translateY(-2px); transition: transform .18s ease-out; }
-  [data-design="pop"] .fab:hover { transform: translate(-1px, -3px); box-shadow: 6px 7px 0 var(--ink); transition: transform .18s ease-out, box-shadow .18s ease-out; }
+    transform: translate(-1px, -2px); transition: transform .18s ease-out, box-shadow .18s ease-out; }
+    [data-design="pop"] .pill:hover { transform: translateY(-2px); transition: transform .18s ease-out; }
+  [data-design="pop"] .fab:hover { transform: translate(-1px, -3px); transition: transform .18s ease-out, box-shadow .18s ease-out; }
   [data-design="pop"] .btn:not(.ghost):not([disabled]):hover:active, [data-design="pop"] .chip:hover:active, [data-design="pop"] .es-chip:hover:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); transition-duration: .08s; }
   [data-design="pop"] .fab:hover:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
 }
@@ -146,7 +146,7 @@
 [data-design="pop"] .ds.today span, [data-design="pop"] .ds.today b { color: var(--accent); }
 [data-design="pop"] .ds.sel b { background: var(--accent); color: var(--accent-ink); border-color: var(--ink); box-shadow: var(--pop-sm); }
 [data-design="pop"] .now-card { box-shadow: inset 0 6px 0 var(--c, var(--sun)), var(--pop); }
-[data-design="pop"] .now-card:not(.idle) { box-shadow: inset 0 6px 0 var(--c, var(--sun)), 6px 6px 0 var(--sun), 6px 6px 0 2px var(--ink); }
+[data-design="pop"] .now-card:not(.idle) { box-shadow: inset 0 6px 0 var(--c, var(--sun)); }
 [data-design="pop"] .side .nm, [data-design="pop"] .side .big, [data-design="pop"] .side .mid b { font-weight: 900; }
 [data-design="pop"] .live { background: var(--accent); box-shadow: 0 0 0 1.5px var(--ink); }
 [data-design="pop"] .ring-bg { stroke: var(--surface-2); }
@@ -222,13 +222,13 @@
 [data-design="pop"] .fab { background: var(--sun); color: #1d1b3a; border: 2px solid var(--ink); border-radius: 50%; box-shadow: var(--pop); transition: transform .3s var(--spring), box-shadow .3s var(--spring), bottom .28s cubic-bezier(.2, .8, .2, 1); }
 [data-design="pop"] .fab:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
 [data-design="pop"] .fab svg { stroke-width: 3; }
-[data-design="pop"] #toast { background: var(--ink); color: var(--bg); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--sun); font-weight: 700; }
+[data-design="pop"] #toast { background: var(--ink); color: var(--bg); border: 2px solid var(--ink); font-weight: 700; }
 [data-design="pop"] .ext-load { border: 2px solid var(--ink); box-shadow: var(--pop-sm); color: var(--ink); font-weight: 700; }
 [data-design="pop"] .ext-load i { border-color: var(--surface-2); border-top-color: var(--accent); }
 
 /* コマが終わったときのお知らせ：黄色い影のカードと、Pop の6色の紙吹雪 */
 [data-design="pop"] .finish { background: color-mix(in srgb, var(--c) 35%, rgba(29, 27, 58, .6)); }
-[data-design="pop"] .fin-card { border: 3px solid var(--ink); border-radius: 24px; box-shadow: 8px 8px 0 var(--sun), 8px 8px 0 3px var(--ink); animation: pop-in .5s var(--spring); }
+[data-design="pop"] .fin-card { border: 3px solid var(--ink); border-radius: 24px; animation: pop-in .5s var(--spring); }
 [data-design="pop"] .fin-big { border: 3px solid var(--ink); box-shadow: var(--pop-sm); color: #fff; }
 [data-design="pop"] .fin-card h2 { font-weight: 900; }
 [data-design="pop"] .fin-next { border-top: 2px dashed var(--border); }
@@ -255,7 +255,7 @@
 
 [data-design="pop"] .settings-btn { border: 2px solid var(--ink); color: var(--ink); box-shadow: var(--pop-sm); transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
 [data-design="pop"] .settings-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
-@media (hover: hover) { [data-design="pop"] .settings-btn:hover { transform: translate(-1px, -2px) rotate(30deg); box-shadow: 3px 4px 0 var(--ink); transition: transform .25s ease-out, box-shadow .25s ease-out; } }
+@media (hover: hover) { [data-design="pop"] .settings-btn:hover { transform: translate(-1px, -2px) rotate(30deg); transition: transform .25s ease-out, box-shadow .25s ease-out; } }
 [data-design="pop"] .btn.today-on { background: var(--accent); border-color: var(--ink); color: var(--accent-ink); }
 [data-design="pop"] .ev.picked { border-color: var(--sky); box-shadow: 2px 2px 0 var(--sky); }
 [data-design="pop"] .ev.picked::before { background: var(--sky); color: #fff; box-shadow: 0 0 0 1.5px var(--ink); }
