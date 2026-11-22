@@ -20,7 +20,7 @@
   --pop-lg: 0 0 0 transparent;
   --spring: cubic-bezier(.34, 1.56, .64, 1);
   /* アプリの色の役割に当てはめる */
-  --bg: #f5f1e4;
+  --bg: #ffffff;   /* 背景は真っ白（本人の好み） */
   --surface: #ffffff;
   --surface-2: #efe8d3;
   --border: #d6cdb3;
