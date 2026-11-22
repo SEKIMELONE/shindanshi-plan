@@ -127,6 +127,7 @@
 [data-design="pop"] .dh.today .dw { color: var(--accent); }
 [data-design="pop"] .dh.today .dn { background: var(--accent); color: var(--accent-ink); border-color: var(--ink); box-shadow: var(--pop-sm); }
 [data-design="pop"] .col.today { background-color: color-mix(in srgb, var(--sun) 16%, transparent); }
+[data-design="pop"] .cal.day .col.today { background-color: transparent; }   /* 1日の拡大表示は白（1日しかないので目印はいらない） */
 [data-design="pop"] .ev { border-radius: 8px; border: 1.5px solid var(--ink); box-shadow: none; background: color-mix(in srgb, var(--c, var(--border)) 38%, var(--surface)); padding: 2px 3px 2px 4px; }
 [data-design="pop"] .ev b { font-weight: 900; }
 [data-design="pop"] .ev.lecture, [data-design="pop"] .ev.off { background: var(--surface-2); border: 1.5px dashed color-mix(in srgb, var(--ink) 40%, transparent); }
