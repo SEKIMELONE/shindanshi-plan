@@ -243,7 +243,7 @@
 [data-design="pop"] dialog.evsheet { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 
 /* 勉強のコマ：科目の色でべた塗り、太い枠とずらした影で前に出す。ふつうの予定：淡い色と細い枠で後ろに */
-[data-design="pop"] .ev.study:not(.done) { background: var(--c); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); color: #1d1b3a; }
+[data-design="pop"] .ev.study:not(.done) { background: var(--c); border: 2px solid var(--ink); box-shadow: none; color: #1d1b3a; }
 [data-design="pop"] .ev.study:not(.done) b { color: #1d1b3a; font-weight: 900; }
 [data-design="pop"] .ev.study:not(.done) span, [data-design="pop"] .ev.study:not(.done) small, [data-design="pop"] .ev.study:not(.done) .tm { color: rgba(29, 27, 58, .8); }
 [data-design="pop"] .ev.ext.tint { background: color-mix(in srgb, var(--c) 14%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--c) 50%, transparent); box-shadow: none; }
@@ -251,13 +251,13 @@
 [data-design="pop"] .ev.ext:not(.tint) { background: var(--surface); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
 
 /* いまのコマ：形はそのまま、枠と影の色だけピンクに変える */
-[data-design="pop"] .ev.study.is-now:not(.done) { border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
+[data-design="pop"] .ev.study.is-now:not(.done) { border-color: var(--accent); box-shadow: none; }
 
 [data-design="pop"] .settings-btn { border: 2px solid var(--ink); color: var(--ink); box-shadow: var(--pop-sm); transition: transform .3s var(--spring), box-shadow .3s var(--spring); }
 [data-design="pop"] .settings-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); background: var(--surface); }
 @media (hover: hover) { [data-design="pop"] .settings-btn:hover { transform: translate(-1px, -2px) rotate(30deg); transition: transform .25s ease-out, box-shadow .25s ease-out; } }
 [data-design="pop"] .btn.today-on { background: var(--accent); border-color: var(--ink); color: var(--accent-ink); }
-[data-design="pop"] .ev.picked { border-color: var(--sky); box-shadow: 2px 2px 0 var(--sky); }
+[data-design="pop"] .ev.picked { border-color: var(--sky); box-shadow: none; }
 [data-design="pop"] .ev.picked::before { background: var(--sky); color: #fff; box-shadow: 0 0 0 1.5px var(--ink); }
 [data-design="pop"] .selbar { border: 2px solid var(--ink); box-shadow: var(--pop); }
 
